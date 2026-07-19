@@ -1,0 +1,194 @@
+"""AQI data router — current readings, ward history, heatmap, and ingestion."""
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth import get_current_government_user, get_current_user
+from app.database import get_db
+from app.models import AQIData
+from app.schemas import AQIDataCreate, AQIDataResponse
+
+router = APIRouter(prefix="/aqi", tags=["AQI Data"])
+
+
+def _aqi_category(aqi: float) -> str:
+    """Return the AQI category label for a numeric AQI value."""
+    if aqi <= 50:
+        return "Good"
+    if aqi <= 100:
+        return "Satisfactory"
+    if aqi <= 200:
+        return "Moderate"
+    if aqi <= 300:
+        return "Poor"
+    if aqi <= 400:
+        return "Very Poor"
+    return "Severe"
+
+
+def _enrich(record: AQIData) -> AQIDataResponse:
+    """Convert an ORM record to response schema, adding computed category."""
+    resp = AQIDataResponse.model_validate(record)
+    resp.aqi_category = _aqi_category(record.aqi_value)
+    return resp
+
+
+@router.get(
+    "/current",
+    response_model=list[AQIDataResponse],
+    summary="Get the latest AQI reading for every ward",
+)
+async def get_current_aqi(db: AsyncSession = Depends(get_db)):
+    """Return the most-recent AQI snapshot for each ward.
+
+    Args:
+        db: Async database session.
+
+    Returns:
+        List of the latest AQI records, one per ward.
+    """
+    # Subquery: max id per ward (proxy for latest row)
+    from sqlalchemy import func
+
+    subq = (
+        select(func.max(AQIData.id).label("max_id"))
+        .group_by(AQIData.ward_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
+    )
+    records = result.scalars().all()
+    return [_enrich(r) for r in records]
+
+
+@router.get(
+    "/ward/{ward_id}",
+    response_model=list[AQIDataResponse],
+    summary="Get AQI history for a specific ward",
+)
+async def get_ward_aqi_history(
+    ward_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return historical AQI readings for *ward_id*, ordered newest-first.
+
+    Args:
+        ward_id: Ward identifier string.
+        limit: Maximum number of records to return (1–1000).
+        db: Async database session.
+
+    Returns:
+        List of AQI readings for the specified ward.
+
+    Raises:
+        HTTPException 404: If no data exists for that ward.
+    """
+    result = await db.execute(
+        select(AQIData)
+        .where(AQIData.ward_id == ward_id)
+        .order_by(desc(AQIData.timestamp))
+        .limit(limit)
+    )
+    records = result.scalars().all()
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No AQI data found for ward '{ward_id}'",
+        )
+    return [_enrich(r) for r in records]
+
+
+@router.get(
+    "/heatmap",
+    summary="Get all AQI data points suitable for a map heatmap",
+)
+async def get_heatmap_data(
+    hours_back: int = Query(default=720, ge=1, le=8760),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return lat/lng/AQI tuples for the past *hours_back* hours.
+
+    Filters to records that have both latitude and longitude populated.
+
+    Args:
+        hours_back: How many hours of history to include (1–168).
+        db: Async database session.
+
+    Returns:
+        List of dicts with keys: ward_id, ward_name, latitude, longitude,
+        aqi_value, aqi_category, timestamp.
+    """
+    from datetime import timedelta
+    from sqlalchemy import and_
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+    result = await db.execute(
+        select(AQIData).where(
+            and_(
+                AQIData.timestamp >= cutoff,
+                AQIData.latitude.isnot(None),
+                AQIData.longitude.isnot(None),
+            )
+        )
+    )
+    records = result.scalars().all()
+    return [
+        {
+            "ward_id": r.ward_id,
+            "ward_name": r.ward_name,
+            "latitude": r.latitude,
+            "longitude": r.longitude,
+            "aqi_value": r.aqi_value,
+            "aqi_category": _aqi_category(r.aqi_value),
+            "timestamp": r.timestamp.isoformat(),
+        }
+        for r in records
+    ]
+
+
+@router.post(
+    "/ingest",
+    response_model=AQIDataResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Ingest a new AQI reading (government / admin only)",
+)
+async def ingest_aqi(
+    payload: AQIDataCreate,
+    db: AsyncSession = Depends(get_db),
+    _current_user=Depends(get_current_government_user),
+):
+    """Store a new AQI measurement record (restricted to government users).
+
+    Args:
+        payload: AQI reading details.
+        db: Async database session.
+        _current_user: Authenticated government user (injected).
+
+    Returns:
+        The newly created AQI record.
+    """
+    record = AQIData(
+        ward_id=payload.ward_id,
+        ward_name=payload.ward_name,
+        aqi_value=payload.aqi_value,
+        pm25=payload.pm25,
+        pm10=payload.pm10,
+        no2=payload.no2,
+        so2=payload.so2,
+        co=payload.co,
+        o3=payload.o3,
+        timestamp=payload.timestamp or datetime.now(timezone.utc),
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        source=payload.source,
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return _enrich(record)
