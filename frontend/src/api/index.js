@@ -17,10 +17,11 @@ export const authAPI = {
 }
 
 export const aqiAPI = {
-  getCurrentAQI: () => axios.get('/aqi/current'),
+  getCurrentAQI: (city) => axios.get(city ? `/aqi/current?city=${city}` : '/aqi/current'),
   getWardAQI: (wardId) => axios.get(`/aqi/ward/${wardId}`),
-  getHeatmapData: () => axios.get('/aqi/heatmap'),
-  getWardList: () => axios.get('/aqi/wards'),
+  getHeatmapData: (city) => axios.get(city ? `/aqi/heatmap?city=${city}` : '/aqi/heatmap'),
+  getWardList: (city) => axios.get(city ? `/aqi/wards?city=${city}` : '/aqi/wards'),
+  getCities: () => axios.get('/aqi/cities'),
   getHistoricalAQI: (wardId, days = 7) => axios.get(`/aqi/historical/${wardId}?days=${days}`),
 }
 
@@ -39,8 +40,8 @@ export const predictionsAPI = {
 
 export const hospitalsAPI = {
   getHospitals: () => axios.get('/hospitals'),
-  getNearbyHospitals: (lat, lng, radius) => 
-    axios.get(`/hospitals/nearby?lat=${lat}&lng=${lng}&radius=${radius}`),
+  getNearbyHospitals: (lat, lng, radius) =>
+    axios.get(`/hospitals/nearby?lat=${lat}&lng=${lng}&radius_km=${radius}`),
 }
 
 export const healthAPI = {

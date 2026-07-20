@@ -1,9 +1,9 @@
 import 'leaflet/dist/leaflet.css'
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
-// Custom red-cross hospital icon
+// Red cross hospital icon
 const hospitalIcon = L.divIcon({
   className: '',
   html: `<div style="
@@ -20,6 +20,22 @@ const hospitalIcon = L.divIcon({
   popupAnchor: [0, -18],
 })
 
+// Blue pulsing user location icon
+const userIcon = L.divIcon({
+  className: '',
+  html: `<div style="
+    width:20px;height:20px;
+    background:#3b82f6;
+    border:3px solid #fff;
+    border-radius:50%;
+    box-shadow:0 0 0 6px rgba(59,130,246,0.3), 0 2px 8px rgba(0,0,0,.5);
+  "></div>`,
+  iconSize:    [20, 20],
+  iconAnchor:  [10, 10],
+  popupAnchor: [0, -14],
+})
+
+// Pan to a target position
 function PanTo({ target }) {
   const map = useMap()
   useEffect(() => {
@@ -32,15 +48,43 @@ function PanTo({ target }) {
   return null
 }
 
+// Fit map to show user + all hospitals
+function FitBounds({ userLocation, hospitals }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!userLocation) return
+    const points = [[userLocation.lat, userLocation.lng]]
+    hospitals.forEach(h => {
+      const lat = h.lat ?? h.latitude
+      const lng = h.lng ?? h.longitude
+      if (lat && lng) points.push([lat, lng])
+    })
+    if (points.length > 1) {
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 14 })
+    } else {
+      map.setView([userLocation.lat, userLocation.lng], 13)
+    }
+  // only re-fit when location or hospital list changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLocation?.lat, userLocation?.lng, hospitals.length])
+  return null
+}
+
 export default function HospitalMap({
   hospitals        = [],
+  userLocation     = null,
   center           = [23.0225, 72.5714],
   selectedHospital = null,
+  radius           = 5,
   height           = '100%',
 }) {
+  const mapCenter = userLocation
+    ? [userLocation.lat, userLocation.lng]
+    : center
+
   return (
     <MapContainer
-      center={center}
+      center={mapCenter}
       zoom={12}
       style={{ height, width: '100%' }}
       className="rounded-xl z-0"
@@ -49,8 +93,45 @@ export default function HospitalMap({
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         attribution='&copy; <a href="https://carto.com">CARTO</a>'
       />
+
+      {/* Fit bounds when data changes */}
+      {userLocation && (
+        <FitBounds userLocation={userLocation} hospitals={hospitals} />
+      )}
+
+      {/* Pan to selected hospital */}
       {selectedHospital && <PanTo target={selectedHospital} />}
 
+      {/* Radius circle around user */}
+      {userLocation && (
+        <Circle
+          center={[userLocation.lat, userLocation.lng]}
+          radius={radius * 1000}           // metres
+          pathOptions={{
+            color: '#3b82f6',
+            fillColor: '#3b82f6',
+            fillOpacity: 0.06,
+            weight: 1.5,
+            dashArray: '6 4',
+          }}
+        />
+      )}
+
+      {/* User location marker */}
+      {userLocation && (
+        <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
+          <Popup>
+            <div style={{ fontFamily: 'system-ui', minWidth: 140 }}>
+              <strong style={{ color: '#60a5fa' }}>📍 Your Location</strong>
+              <p style={{ color: '#999', fontSize: 11, margin: '4px 0 0' }}>
+                {userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+
+      {/* Hospital markers */}
       {hospitals.map((h, i) => {
         const lat = h.lat ?? h.latitude
         const lng = h.lng ?? h.longitude
@@ -60,13 +141,13 @@ export default function HospitalMap({
             <Popup>
               <div style={{ minWidth: 200, fontFamily: 'system-ui, sans-serif' }}>
                 <strong style={{ color: '#fff', fontSize: 13 }}>{h.name}</strong>
-                {h.distance_km != null && (
-                  <p style={{ color: '#60a5fa', fontSize: 11, margin: '4px 0' }}>
-                    {h.distance_km.toFixed(1)} km away
+                {h.distance != null && (
+                  <p style={{ color: '#34d399', fontSize: 12, margin: '4px 0 2px', fontWeight: 600 }}>
+                    📍 {h.distance.toFixed(1)} km away
                   </p>
                 )}
-                {h.contact && (
-                  <p style={{ color: '#ccc', fontSize: 11 }}>📞 {h.contact}</p>
+                {(h.contact || h.phone) && (
+                  <p style={{ color: '#ccc', fontSize: 11 }}>📞 {h.contact ?? h.phone}</p>
                 )}
                 {h.address && (
                   <p style={{ color: '#999', fontSize: 11, marginTop: 4 }}>{h.address}</p>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { useCityStore, CITIES } from '../../store/cityStore'
 import {
   CloudIcon,
   UserCircleIcon,
@@ -11,6 +12,7 @@ import {
   MapIcon,
   BeakerIcon,
   HeartIcon,
+  BuildingLibraryIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
@@ -18,6 +20,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuthStore()
+  const { selectedCity, setCity } = useCityStore()
   const navigate = useNavigate()
 
   const dashboardPath = user?.role === 'government' ? '/government' : '/citizen'
@@ -72,6 +75,21 @@ export default function Navbar() {
           )}
 
           <div className="flex items-center gap-3">
+            {/* City Selector — visible when authenticated */}
+            {isAuthenticated && (
+              <div className="flex items-center gap-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-2 py-1">
+                <BuildingLibraryIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                <select
+                  value={selectedCity}
+                  onChange={e => setCity(e.target.value)}
+                  className="bg-transparent text-sm text-white font-medium focus:outline-none cursor-pointer pr-1"
+                >
+                  {CITIES.map(c => (
+                    <option key={c} value={c} className="bg-gray-800 text-white">{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {isAuthenticated ? (
               <div className="relative">
                 <button

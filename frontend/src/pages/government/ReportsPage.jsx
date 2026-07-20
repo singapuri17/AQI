@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { governmentAPI } from '../../api'
+import { governmentAPI, aqiAPI } from '../../api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { DocumentTextIcon, ArrowDownTrayIcon, DocumentChartBarIcon } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useCityStore } from '../../store/cityStore'
 
-const WARDS = [
-  'Naroda', 'Vatva', 'Nikol', 'Gota', 'Bopal', 'Satellite', 'Navrangpura',
-  'Maninagar', 'Vastral', 'Chandkheda', 'Ghatlodia', 'Thaltej', 'Bapunagar', 'Odhav', 'Isanpur',
-]
+const WARDS_BY_CITY = {
+  Ahmedabad: ['AMD_W01','AMD_W02','AMD_W03','AMD_W04','AMD_W05','AMD_W06','AMD_W07','AMD_W08','AMD_W09','AMD_W10','AMD_W11','AMD_W12','AMD_W13','AMD_W14','AMD_W15','AMD_W16','AMD_W17','AMD_W18','AMD_W19','AMD_W20'],
+  Surat:     ['SRT_W01','SRT_W02','SRT_W03','SRT_W04','SRT_W05','SRT_W06','SRT_W07','SRT_W08','SRT_W09','SRT_W10','SRT_W11','SRT_W12','SRT_W13','SRT_W14','SRT_W15'],
+  Vadodara:  ['VDR_W01','VDR_W02','VDR_W03','VDR_W04','VDR_W05','VDR_W06','VDR_W07','VDR_W08','VDR_W09','VDR_W10','VDR_W11','VDR_W12','VDR_W13','VDR_W14','VDR_W15'],
+}
 
 const MOCK_REPORTS = [
   {
@@ -35,8 +37,24 @@ export default function ReportsPage() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [selectedWard, setSelectedWard] = useState(WARDS[0])
+  const [wards, setWards] = useState([])
+  const [selectedWard, setSelectedWard] = useState('')
   const [previewReport, setPreviewReport] = useState(null)
+  const { selectedCity } = useCityStore()
+
+  // Load ward list for selected city from backend
+  useEffect(() => {
+    aqiAPI.getWardList(selectedCity).then(res => {
+      const list = Array.isArray(res.data) ? res.data : []
+      setWards(list)
+      if (list.length > 0) setSelectedWard(list[0].ward_id)
+    }).catch(() => {
+      // fallback to static list
+      const fallback = (WARDS_BY_CITY[selectedCity] || []).map(id => ({ ward_id: id, ward_name: id }))
+      setWards(fallback)
+      if (fallback.length > 0) setSelectedWard(fallback[0].ward_id)
+    })
+  }, [selectedCity])
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -115,7 +133,9 @@ export default function ReportsPage() {
               value={selectedWard}
               onChange={e => setSelectedWard(e.target.value)}
             >
-              {WARDS.map(w => <option key={w}>{w}</option>)}
+              {wards.map(w => (
+                <option key={w.ward_id} value={w.ward_id}>{w.ward_name}</option>
+              ))}
             </select>
           </div>
           <button

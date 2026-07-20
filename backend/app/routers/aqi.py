@@ -152,6 +152,39 @@ async def get_heatmap_data(
     ]
 
 
+@router.get(
+    "/wards",
+    summary="List all ward IDs and names (optionally filtered by city)",
+)
+async def get_wards(
+    city: Optional[str] = Query(default=None, description="Filter by city name"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return distinct ward_id + ward_name pairs, optionally filtered by city."""
+    from sqlalchemy import func, distinct
+    from app.models import WardBoundary
+
+    query = select(WardBoundary.ward_id, WardBoundary.ward_name, WardBoundary.city)
+    if city:
+        query = query.where(WardBoundary.city == city)
+    query = query.order_by(WardBoundary.city, WardBoundary.ward_name)
+    result = await db.execute(query)
+    rows = result.all()
+    return [{"ward_id": r.ward_id, "ward_name": r.ward_name, "city": r.city} for r in rows]
+
+
+@router.get(
+    "/cities",
+    summary="List all available cities",
+)
+async def get_cities(db: AsyncSession = Depends(get_db)):
+    """Return distinct city names available in the database."""
+    from app.models import WardBoundary
+    result = await db.execute(select(WardBoundary.city).distinct().order_by(WardBoundary.city))
+    cities = [row[0] for row in result.all() if row[0]]
+    return cities
+
+
 @router.post(
     "/ingest",
     response_model=AQIDataResponse,
