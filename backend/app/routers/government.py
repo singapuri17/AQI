@@ -118,7 +118,8 @@ async def update_action_status(
     return GovernmentActionResponse.model_validate(action)
 
 
-
+@router.get(
+    "/recommendations",
     summary="Get AI-generated government recommendations for the city",
 )
 async def get_recommendations(
