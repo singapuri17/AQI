@@ -233,14 +233,24 @@ async def get_ward_recommendations(
 )
 async def list_reports(
     ward_id: Optional[str] = None,
+    city: Optional[str] = None,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    """Return metadata for all generated reports, newest first."""
+    """Return metadata for all generated reports, newest first, filtered by city."""
+    from app.models import WardBoundary
+    city = city.strip().title() if city else None
     query = select(EvidenceReport).order_by(desc(EvidenceReport.created_at))
     if ward_id:
         query = query.where(EvidenceReport.ward_id == ward_id)
+    elif city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(EvidenceReport.ward_id.in_(city_ward_ids))
     query = query.limit(limit)
     result = await db.execute(query)
     reports = result.scalars().all()

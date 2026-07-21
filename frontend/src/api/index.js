@@ -106,5 +106,5 @@ export const governmentAPI = {
   downloadReport: (reportId) => axios.get(`/government/reports/${reportId}/download`, {
     responseType: 'blob',
   }),
-  getReports: () => axios.get('/government/reports'),
+  getReports: (city) => axios.get(city ? `/government/reports?city=${encodeURIComponent(city)}` : '/government/reports'),
 }
