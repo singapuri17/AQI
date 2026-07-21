@@ -3,67 +3,98 @@ import { healthAPI, aqiAPI } from '../../api'
 import HealthRiskGauge from '../../components/charts/HealthRiskGauge'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { HeartIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
-import { getRiskBgClass } from '../../utils/aqiUtils'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-
-const WARDS = [
-  { id: 1, name: 'Naroda' }, { id: 2, name: 'Vatva' }, { id: 3, name: 'Nikol' },
-  { id: 4, name: 'Gota' }, { id: 5, name: 'Bopal' }, { id: 6, name: 'Satellite' },
-  { id: 7, name: 'Navrangpura' }, { id: 8, name: 'Maninagar' }, { id: 9, name: 'Vastral' },
-  { id: 10, name: 'Chandkheda' }, { id: 11, name: 'Ghatlodia' }, { id: 12, name: 'Thaltej' },
-]
+import { useCityStore, filterWardsByCity } from '../../store/cityStore'
 
 const LANGUAGES = [
-  { value: 'english', label: 'English' },
-  { value: 'hindi', label: 'Hindi' },
+  { value: 'english',  label: 'English'  },
+  { value: 'hindi',    label: 'Hindi'    },
   { value: 'gujarati', label: 'Gujarati' },
 ]
 
 const mockAdvice = {
   english: {
-    activity: 'Avoid prolonged outdoor activities. Moderate exercise indoors is fine. Elderly and children should stay indoors.',
-    mask: 'Wear N95/KN95 mask if going outside. Regular surgical masks offer insufficient protection against PM2.5 particles.',
-    precautions: 'Keep windows closed. Use air purifier if available. Stay hydrated. Monitor symptoms like coughing, throat irritation.',
+    activity:    'Avoid prolonged outdoor activities. Moderate indoor exercise is fine. Elderly and children should stay indoors.',
+    mask:        'Wear an N95/KN95 mask outdoors. Regular surgical masks offer insufficient protection against PM2.5 particles.',
+    precautions: 'Keep windows closed. Use an air purifier if available. Stay hydrated. Watch for coughing or throat irritation.',
   },
   hindi: {
-    activity: 'लंबे समय तक बाहरी गतिविधियों से बचें। घर के अंदर हल्का व्यायाम ठीक है। बुजुर्ग और बच्चे घर पर रहें।',
-    mask: 'बाहर जाने पर N95/KN95 मास्क पहनें। सामान्य सर्जिकल मास्क PM2.5 कणों से पर्याप्त सुरक्षा नहीं देते।',
+    activity:    'लंबे समय तक बाहरी गतिविधियों से बचें। घर के अंदर हल्का व्यायाम ठीक है। बुजुर्ग और बच्चे घर पर रहें।',
+    mask:        'बाहर जाने पर N95/KN95 मास्क पहनें। सामान्य सर्जिकल मास्क PM2.5 कणों से पर्याप्त सुरक्षा नहीं देते।',
     precautions: 'खिड़कियां बंद रखें। उपलब्ध हो तो एयर प्यूरीफायर उपयोग करें। पानी पर्याप्त पियें।',
   },
   gujarati: {
-    activity: 'લાંબા સમય સુધી બહારની પ્રવૃત્તિઓ ટાળો. ઘરની અંદર હળવી કસરત ઠીક છે. વૃદ્ધો અને બાળકો ઘરે રહો.',
-    mask: 'બહાર જતી વખતે N95/KN95 માસ્ક પહેરો. સામાન્ય સર્જિકલ માસ્ક PM2.5 કણો સામે પૂરતું રક્ષણ આપતા નથી.',
+    activity:    'લાંબા સમય સુધી બહારની પ્રવૃત્તિઓ ટાળો. ઘરની અંદર હળવી કસરત ઠીક છે. વૃદ્ધો અને બાળકો ઘરે રહો.',
+    mask:        'બહાર જતી વખતે N95/KN95 માસ્ક પહેરો. સામાન્ય સર્જિકલ માસ્ક PM2.5 સામે પૂરતું રક્ષણ આપતા નથી.',
     precautions: 'બારીઓ બંધ રાખો. ઉપલબ્ધ હોય તો એર પ્યુરિફાયર વાપરો. પૂરતું પાણી પીઓ.',
   },
 }
 
 export default function HealthRiskPage() {
+  const { selectedCity }  = useCityStore()
+  const [cityWards, setCityWards]   = useState([])
+  const [wardsLoading, setWardsLoading] = useState(true)
+
   const [form, setForm] = useState({
     age_category: 'adult',
-    respiratory: false,
-    ward_id: 1,
+    respiratory:  false,
+    ward_id:      '',    // will be set after wards load
   })
-  const [result, setResult] = useState(null)
-  const [advice, setAdvice] = useState(null)
+  const [result, setResult]   = useState(null)
+  const [advice, setAdvice]   = useState(null)
   const [loading, setLoading] = useState(false)
-  const [language, setLanguage] = useState('english')
+  const [language, setLang]   = useState('english')
+
+  // ── Load wards for the selected city ──────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const loadWards = async () => {
+      setWardsLoading(true)
+      setResult(null)
+      setAdvice(null)
+      try {
+        const res  = await aqiAPI.getCurrentAQI(selectedCity)
+        const all  = Array.isArray(res.data) ? res.data : []
+        const city = filterWardsByCity(all, selectedCity)
+        if (!cancelled) {
+          setCityWards(city)
+          setForm(f => ({ ...f, ward_id: city[0]?.ward_id ?? '' }))
+        }
+      } catch {
+        if (!cancelled) {
+          setCityWards([])
+          setForm(f => ({ ...f, ward_id: '' }))
+        }
+      } finally {
+        if (!cancelled) setWardsLoading(false)
+      }
+    }
+    loadWards()
+    return () => { cancelled = true }
+  }, [selectedCity])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+
+    // Look up the current AQI for the chosen ward
+    const chosenWard = cityWards.find(w => w.ward_id === form.ward_id)
+    const wardAQI    = chosenWard?.aqi_value ?? chosenWard?.aqi ?? 150
+
     try {
       const riskRes = await healthAPI.getRiskScore({
-        age_category: form.age_category,
+        aqi_level:      wardAQI,
+        age_category:   form.age_category,
         has_respiratory: form.respiratory,
-        ward_id: form.ward_id,
+        ward_id:        form.ward_id,
       })
       setResult(riskRes.data)
 
       try {
         const adviceRes = await healthAPI.getHealthAdvice({
-          risk_score: riskRes.data.risk_score,
-          age_category: form.age_category,
+          aqi_level:      wardAQI,
+          age_category:   form.age_category,
           has_respiratory: form.respiratory,
           language,
         })
@@ -73,9 +104,9 @@ export default function HealthRiskPage() {
       }
       toast.success('Risk assessment complete')
     } catch {
-      const mockScore = form.respiratory ? 72 : form.age_category === 'child' ? 65 : form.age_category === 'elderly' ? 78 : 45
-      const mockCategory = mockScore >= 75 ? 'Severe' : mockScore >= 50 ? 'High' : mockScore >= 25 ? 'Moderate' : 'Low'
-      setResult({ risk_score: mockScore, risk_category: mockCategory, ward_aqi: 145 })
+      const score    = form.respiratory ? 72 : form.age_category === 'child' ? 65 : form.age_category === 'elderly' ? 78 : 45
+      const category = score >= 75 ? 'Severe' : score >= 50 ? 'High' : score >= 25 ? 'Moderate' : 'Low'
+      setResult({ risk_score: score, risk_category: category, ward_aqi: wardAQI })
       setAdvice(mockAdvice[language])
     } finally {
       setLoading(false)
@@ -89,20 +120,27 @@ export default function HealthRiskPage() {
           <HeartIcon className="w-6 h-6 text-red-400" />
           Health Risk Assessment
         </h1>
-        <p className="text-gray-400 text-sm mt-0.5">Get personalized health risk based on your profile and local AQI</p>
+        <p className="text-gray-400 text-sm mt-0.5">
+          Personalised risk based on your profile and current AQI in{' '}
+          <span className="text-white font-medium">{selectedCity}</span>
+        </p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
+        {/* ── Form ── */}
         <div className="glass-card p-6">
-          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-5">Your Profile</h2>
+          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-5">
+            Your Profile
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Age category */}
             <div>
               <label className="label-text">Age Category</label>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { value: 'child', label: 'Child', emoji: '👶', desc: 'Under 12' },
-                  { value: 'adult', label: 'Adult', emoji: '🧑', desc: '12-60' },
-                  { value: 'elderly', label: 'Elderly', emoji: '👴', desc: 'Over 60' },
+                  { value: 'child',   label: 'Child',   emoji: '👶', desc: 'Under 12' },
+                  { value: 'adult',   label: 'Adult',   emoji: '🧑', desc: '12–60'    },
+                  { value: 'elderly', label: 'Elderly', emoji: '👴', desc: 'Over 60'  },
                 ].map(({ value, label, emoji, desc }) => (
                   <button
                     key={value}
@@ -123,21 +161,49 @@ export default function HealthRiskPage() {
               </div>
             </div>
 
+            {/* Ward selector — city-specific */}
             <div>
-              <label className="label-text">Select Ward</label>
-              <select
-                className="input-field"
-                value={form.ward_id}
-                onChange={e => setForm(f => ({ ...f, ward_id: Number(e.target.value) }))}
-              >
-                {WARDS.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <label className="label-text">
+                Select Ward · <span className="text-blue-400">{selectedCity}</span>
+              </label>
+              {wardsLoading ? (
+                <div className="input-field flex items-center gap-2 text-gray-400 text-sm">
+                  <span className="w-3 h-3 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin" />
+                  Loading wards…
+                </div>
+              ) : (
+                <select
+                  className="input-field"
+                  value={form.ward_id}
+                  onChange={e => setForm(f => ({ ...f, ward_id: e.target.value }))}
+                >
+                  {cityWards.map(w => (
+                    <option key={w.ward_id} value={w.ward_id}>
+                      {w.ward_name ?? w.name ?? w.ward_id}
+                    </option>
+                  ))}
+                  {cityWards.length === 0 && (
+                    <option disabled value="">No wards available</option>
+                  )}
+                </select>
+              )}
+              {/* Show current AQI for the chosen ward */}
+              {form.ward_id && !wardsLoading && (() => {
+                const w = cityWards.find(x => x.ward_id === form.ward_id)
+                const aqi = w?.aqi_value ?? w?.aqi
+                return aqi != null ? (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Current AQI: <span className="text-white font-semibold">{Math.round(aqi)}</span>
+                  </p>
+                ) : null
+              })()}
             </div>
 
+            {/* Respiratory toggle */}
             <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-xl border border-gray-700/50">
               <div>
                 <p className="text-sm font-medium text-white">Respiratory Conditions</p>
-                <p className="text-xs text-gray-400 mt-0.5">Asthma, COPD, or other respiratory issues</p>
+                <p className="text-xs text-gray-400 mt-0.5">Asthma, COPD, or similar</p>
               </div>
               <button
                 type="button"
@@ -156,27 +222,36 @@ export default function HealthRiskPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || wardsLoading || !form.ward_id}
               className="btn-primary w-full py-3 flex items-center justify-center gap-2"
             >
               {loading ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analyzing...</>
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing…
+                </>
               ) : (
-                <><ShieldCheckIcon className="w-5 h-5" /> Assess My Risk</>
+                <>
+                  <ShieldCheckIcon className="w-5 h-5" />
+                  Assess My Risk
+                </>
               )}
             </button>
           </form>
         </div>
 
+        {/* ── Results ── */}
         <div className="space-y-4">
           {result ? (
             <>
               <div className="glass-card p-6">
-                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Your Risk Score</h2>
+                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">
+                  Your Risk Score
+                </h2>
                 <div className="flex flex-col items-center">
                   <HealthRiskGauge score={result.risk_score} category={result.risk_category} size={220} />
                 </div>
-                {result.ward_aqi && (
+                {result.ward_aqi != null && (
                   <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50 text-center">
                     <p className="text-xs text-gray-400">Current Ward AQI</p>
                     <p className="text-xl font-bold text-white">{Math.round(result.ward_aqi)}</p>
@@ -187,19 +262,23 @@ export default function HealthRiskPage() {
               {advice && (
                 <div className="glass-card p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Health Advisory</h2>
+                    <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                      Health Advisory
+                    </h2>
                     <select
                       className="input-field !w-32 !py-1 text-sm"
                       value={language}
-                      onChange={e => setLanguage(e.target.value)}
+                      onChange={e => setLang(e.target.value)}
                     >
-                      {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                      {LANGUAGES.map(l => (
+                        <option key={l.value} value={l.value}>{l.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-3">
                     {[
-                      { key: 'activity', label: '🏃 Activity', content: advice.activity },
-                      { key: 'mask', label: '😷 Mask Usage', content: advice.mask },
+                      { key: 'activity',    label: '🏃 Activity',    content: advice.activity    },
+                      { key: 'mask',        label: '😷 Mask Usage',  content: advice.mask        },
                       { key: 'precautions', label: '⚠️ Precautions', content: advice.precautions },
                     ].filter(({ content }) => content).map(({ key, label, content }) => (
                       <div key={key} className="p-3 bg-gray-800/50 rounded-xl border border-gray-700/30">
@@ -215,7 +294,9 @@ export default function HealthRiskPage() {
             <div className="glass-card p-8 flex flex-col items-center justify-center text-center h-64">
               <HeartIcon className="w-12 h-12 text-gray-600 mb-3" />
               <p className="text-gray-300 font-medium">No assessment yet</p>
-              <p className="text-gray-500 text-sm mt-1">Fill out your profile and click "Assess My Risk"</p>
+              <p className="text-gray-500 text-sm mt-1">
+                Fill in your profile and click "Assess My Risk"
+              </p>
             </div>
           )}
         </div>

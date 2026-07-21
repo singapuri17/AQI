@@ -1,19 +1,19 @@
 import axios from './axios'
 
 export const authAPI = {
-  // Login sends JSON (email + password)
   login: (email, password) =>
     axios.post('/auth/login', { email, password }),
-  // Register maps frontend "name" → backend "full_name"
-  register: (data) =>
-    axios.post('/auth/register', {
-      email: data.email,
-      full_name: data.name || data.full_name,
-      password: data.password,
-      role: data.role,
-      city: data.city,
-    }),
   getMe: () => axios.get('/auth/me'),
+}
+
+export const adminAPI = {
+  // Register a new OFFICER (multipart so the document file can be included)
+  registerOfficer: (formData) =>
+    axios.post('/auth/officers', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  listOfficers: ()              => axios.get('/auth/officers'),
+  deleteOfficer: (id)           => axios.delete(`/auth/officers/${id}`),
 }
 
 export const aqiAPI = {

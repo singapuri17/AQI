@@ -45,6 +45,9 @@ async def lifespan(app: FastAPI):
     # Seed synthetic data if the database is empty
     await seed_data_if_empty()
 
+    # Always ensure the default admin account exists
+    await seed_admin_account()
+
     yield
 
     logger.info("Shutting down %s", settings.app_name)
@@ -109,6 +112,39 @@ async def seed_data_if_empty() -> None:
 
         await db.commit()
         logger.info("Synthetic data seeded successfully")
+
+
+async def seed_admin_account() -> None:
+    """Ensure the default administrator account exists in the database.
+
+    Creates admin@airsense.gov / Admin@123 with role=ADMIN on first run.
+    Safe to call on every startup — does nothing if the account already exists.
+    """
+    from sqlalchemy import select
+
+    from app.auth import get_password_hash
+    from app.database import AsyncSessionLocal
+    from app.models import User
+
+    ADMIN_EMAIL = "admin@airsense.gov"
+    ADMIN_PASSWORD = "Admin@123"
+    ADMIN_NAME = "System Administrator"
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.email == ADMIN_EMAIL))
+        if result.scalar_one_or_none():
+            return  # already exists
+
+        admin = User(
+            email=ADMIN_EMAIL,
+            full_name=ADMIN_NAME,
+            hashed_password=get_password_hash(ADMIN_PASSWORD),
+            role="ADMIN",
+            is_active=True,
+        )
+        db.add(admin)
+        await db.commit()
+        logger.info("Default admin account created: %s", ADMIN_EMAIL)
 
 
 # ---------------------------------------------------------------------------

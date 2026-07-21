@@ -39,7 +39,10 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
         String(50), nullable=False, default="citizen"
-    )  # citizen | government
+    )  # citizen | OFFICER | ADMIN
+    gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    date_of_birth: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    document_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ward_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     ward_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

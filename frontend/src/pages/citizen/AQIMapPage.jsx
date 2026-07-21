@@ -6,91 +6,103 @@ import AQIBadge from '../../components/common/AQIBadge'
 import { AQI_LEVELS } from '../../utils/aqiUtils'
 import { ArrowPathIcon, MapIcon } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
+import { useCityStore, CITY_CENTRES, CITY_ZOOM, filterWardsByCity } from '../../store/cityStore'
 
-// Fallback data using the same normalised shape as API data
-const MOCK_WARDS = [
-  { id: 1,  name: 'Naroda',      lat: 23.0731, lng: 72.6419, aqi: 210, pm25: 98.3,  pm10: 162.1, no2: 54.2, so2: 28.7 },
-  { id: 2,  name: 'Vatva',       lat: 22.9805, lng: 72.6286, aqi: 185, pm25: 82.1,  pm10: 134.5, no2: 48.3, so2: 31.2 },
-  { id: 3,  name: 'Nikol',       lat: 23.0353, lng: 72.6475, aqi: 167, pm25: 71.2,  pm10: 118.4, no2: 44.1, so2: 22.6 },
-  { id: 4,  name: 'Gota',        lat: 23.0997, lng: 72.5537, aqi: 142, pm25: 58.3,  pm10: 97.2,  no2: 38.4, so2: 18.9 },
-  { id: 5,  name: 'Bopal',       lat: 23.0175, lng: 72.4680, aqi: 89,  pm25: 31.4,  pm10: 58.7,  no2: 22.1, so2: 11.3 },
-  { id: 6,  name: 'Satellite',   lat: 23.0214, lng: 72.5151, aqi: 58,  pm25: 18.2,  pm10: 34.6,  no2: 16.3, so2: 8.2  },
-  { id: 7,  name: 'Navrangpura', lat: 23.0367, lng: 72.5620, aqi: 76,  pm25: 24.1,  pm10: 45.8,  no2: 21.4, so2: 10.7 },
-  { id: 8,  name: 'Maninagar',   lat: 22.9924, lng: 72.5983, aqi: 131, pm25: 52.3,  pm10: 88.4,  no2: 35.7, so2: 16.8 },
-  { id: 9,  name: 'Vastral',     lat: 22.9869, lng: 72.6598, aqi: 158, pm25: 67.4,  pm10: 109.2, no2: 41.8, so2: 20.3 },
-  { id: 10, name: 'Chandkheda',  lat: 23.1146, lng: 72.5889, aqi: 112, pm25: 44.3,  pm10: 73.8,  no2: 30.1, so2: 15.2 },
-  { id: 11, name: 'Ghatlodia',   lat: 23.0640, lng: 72.5539, aqi: 95,  pm25: 36.1,  pm10: 62.4,  no2: 24.8, so2: 12.1 },
-  { id: 12, name: 'Thaltej',     lat: 23.0527, lng: 72.5076, aqi: 82,  pm25: 28.4,  pm10: 52.1,  no2: 20.3, so2: 9.8  },
-  { id: 13, name: 'Bapunagar',   lat: 23.0437, lng: 72.6121, aqi: 172, pm25: 73.8,  pm10: 122.6, no2: 46.2, so2: 23.4 },
-  { id: 14, name: 'Odhav',       lat: 22.9982, lng: 72.6403, aqi: 196, pm25: 88.7,  pm10: 148.3, no2: 51.4, so2: 29.1 },
-  { id: 15, name: 'Isanpur',     lat: 22.9686, lng: 72.6158, aqi: 148, pm25: 60.2,  pm10: 101.4, no2: 39.7, so2: 19.8 },
-  { id: 16, name: 'Naranpura',   lat: 23.0526, lng: 72.5716, aqi: 103, pm25: 41.5,  pm10: 68.2,  no2: 28.4, so2: 13.7 },
-  { id: 17, name: 'Vejalpur',    lat: 23.0042, lng: 72.5363, aqi: 91,  pm25: 33.2,  pm10: 56.1,  no2: 23.6, so2: 11.8 },
-  { id: 18, name: 'Shahibaug',   lat: 23.0591, lng: 72.5969, aqi: 118, pm25: 46.8,  pm10: 77.3,  no2: 31.9, so2: 14.5 },
-  { id: 19, name: 'Paldi',       lat: 23.0170, lng: 72.5690, aqi: 87,  pm25: 30.1,  pm10: 51.4,  no2: 21.8, so2: 10.2 },
-  { id: 20, name: 'Ramol',       lat: 22.9721, lng: 72.6477, aqi: 161, pm25: 69.3,  pm10: 113.7, no2: 43.2, so2: 21.4 },
-]
+// Per-city mock fallback data so the map always shows something
+const MOCK_WARDS = {
+  Ahmedabad: [
+    { id: 'AMD_W01', name: 'Maninagar',   lat: 22.994, lng: 72.618, aqi: 166 },
+    { id: 'AMD_W02', name: 'Narol',       lat: 22.968, lng: 72.639, aqi: 217 },
+    { id: 'AMD_W03', name: 'Vatva GIDC',  lat: 22.940, lng: 72.637, aqi: 311 },
+    { id: 'AMD_W04', name: 'Odhav',       lat: 23.015, lng: 72.662, aqi: 246 },
+    { id: 'AMD_W05', name: 'Naroda',      lat: 23.074, lng: 72.651, aqi: 285 },
+    { id: 'AMD_W06', name: 'Chandkheda',  lat: 23.102, lng: 72.585, aqi: 175 },
+    { id: 'AMD_W07', name: 'Sabarmati',   lat: 23.081, lng: 72.595, aqi: 198 },
+    { id: 'AMD_W08', name: 'Thaltej',     lat: 23.060, lng: 72.509, aqi: 104 },
+    { id: 'AMD_W09', name: 'Bopal',       lat: 23.027, lng: 72.470, aqi: 75  },
+    { id: 'AMD_W10', name: 'Navrangpura', lat: 23.030, lng: 72.564, aqi: 166 },
+  ],
+  Surat: [
+    { id: 'SRT_W01', name: 'Udhna',      lat: 21.178, lng: 72.853, aqi: 254 },
+    { id: 'SRT_W02', name: 'Sachin GIDC',lat: 21.088, lng: 72.893, aqi: 343 },
+    { id: 'SRT_W03', name: 'Pandesara',  lat: 21.151, lng: 72.871, aqi: 304 },
+    { id: 'SRT_W04', name: 'Katargam',   lat: 21.212, lng: 72.842, aqi: 229 },
+    { id: 'SRT_W05', name: 'Varachha',   lat: 21.211, lng: 72.877, aqi: 197 },
+    { id: 'SRT_W06', name: 'Adajan',     lat: 21.190, lng: 72.793, aqi: 129 },
+    { id: 'SRT_W07', name: 'Vesu',       lat: 21.158, lng: 72.773, aqi: 87  },
+  ],
+  Vadodara: [
+    { id: 'VDR_W01', name: 'Gorwa',       lat: 22.338, lng: 73.148, aqi: 234 },
+    { id: 'VDR_W02', name: 'Makarpura GIDC', lat: 22.251, lng: 73.177, aqi: 271 },
+    { id: 'VDR_W03', name: 'Manjalpur',   lat: 22.274, lng: 73.193, aqi: 167 },
+    { id: 'VDR_W04', name: 'Alkapuri',    lat: 22.309, lng: 73.170, aqi: 124 },
+    { id: 'VDR_W05', name: 'Waghodia Rd', lat: 22.306, lng: 73.230, aqi: 198 },
+    { id: 'VDR_W06', name: 'Nizampura',   lat: 22.349, lng: 73.196, aqi: 156 },
+  ],
+}
 
-// Normalise a backend AQI record → the flat shape the map expects
-function normaliseWard(w, index) {
+function normaliseWard(w, i) {
   return {
-    id:    w.id    ?? w.ward_id  ?? index,
-    name:  w.name  ?? w.ward_name ?? `Ward ${index + 1}`,
-    lat:   w.lat   ?? w.latitude  ?? null,
-    lng:   w.lng   ?? w.longitude ?? null,
-    aqi:   w.aqi   ?? w.aqi_value ?? 0,
-    pm25:  w.pm25  ?? null,
-    pm10:  w.pm10  ?? null,
-    no2:   w.no2   ?? null,
-    so2:   w.so2   ?? null,
+    id:   w.id   ?? w.ward_id   ?? i,
+    name: w.name ?? w.ward_name ?? `Ward ${i + 1}`,
+    lat:  w.lat  ?? w.latitude  ?? null,
+    lng:  w.lng  ?? w.longitude ?? null,
+    aqi:  w.aqi  ?? w.aqi_value ?? 0,
+    pm25: w.pm25 ?? null,
+    pm10: w.pm10 ?? null,
+    no2:  w.no2  ?? null,
+    so2:  w.so2  ?? null,
   }
 }
 
 export default function AQIMapPage() {
-  const [wards, setWards]           = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [lastUpdated, setLastUpdated] = useState(null)
-  const [showHeatmap, setShowHeatmap] = useState(false)
+  const [wards, setWards]         = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [lastUpdated, setLast]    = useState(null)
+  const [showHeatmap, setHeatmap] = useState(false)
+  const { selectedCity }          = useCityStore()
 
-  const fetchData = async () => {
+  const centre = CITY_CENTRES[selectedCity] ?? CITY_CENTRES.Ahmedabad
+  const zoom   = CITY_ZOOM[selectedCity]   ?? 12
+
+  const fetchData = async (city) => {
     setLoading(true)
     try {
-      const res  = await aqiAPI.getCurrentAQI()
-      const raw  = res.data
+      const res  = await aqiAPI.getCurrentAQI(city)
+      const raw  = Array.isArray(res.data) ? res.data : res.data?.wards ?? []
 
-      // Backend returns a flat array of AQI records
-      const list = Array.isArray(raw) ? raw : raw?.wards ?? raw?.data ?? []
+      // Keep only wards belonging to this city
+      const cityRaw    = filterWardsByCity(raw, city)
+      const normalised = cityRaw
+        .map((w, i) => normaliseWard(w, i))
+        .filter(w => w.lat !== null && w.lng !== null)
 
-      if (list.length > 0) {
-        const normalised = list
-          .map((w, i) => normaliseWard(w, i))
-          .filter(w => w.lat !== null && w.lng !== null)   // skip records with no coords
-
-        setWards(normalised.length > 0 ? normalised : MOCK_WARDS)
-      } else {
-        setWards(MOCK_WARDS)
-      }
-      setLastUpdated(new Date())
+      setWards(normalised.length > 0 ? normalised : MOCK_WARDS[city] ?? [])
+      setLast(new Date())
     } catch {
-      setWards(MOCK_WARDS)
-      setLastUpdated(new Date())
+      setWards(MOCK_WARDS[city] ?? [])
+      setLast(new Date())
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  // Re-fetch whenever the selected city changes
+  useEffect(() => {
+    setWards([])
+    fetchData(selectedCity)
+  }, [selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
-    toast.promise(fetchData(), {
-      loading: 'Refreshing data...',
+    toast.promise(fetchData(selectedCity), {
+      loading: 'Refreshing…',
       success: 'AQI data updated',
-      error: 'Failed to refresh',
+      error:   'Failed to refresh',
     })
   }
 
   return (
-    <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 120px)' }}>
+    <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 160px)' }}>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
         <div>
@@ -99,13 +111,13 @@ export default function AQIMapPage() {
             AQI Map
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">
-            Real-time air quality across Ahmedabad's 20 wards
+            Real-time air quality · <span className="text-white font-medium">{selectedCity}</span>
             {lastUpdated && ` · Updated ${lastUpdated.toLocaleTimeString()}`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowHeatmap(h => !h)}
+            onClick={() => setHeatmap(h => !h)}
             className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
               showHeatmap
                 ? 'bg-blue-600 border-blue-500 text-white'
@@ -124,22 +136,26 @@ export default function AQIMapPage() {
         </div>
       </div>
 
-      {/* Main content: map + sidebar */}
+      {/* Map + sidebar */}
       <div className="flex gap-4 flex-1 min-h-0">
-        {/* Map */}
         <div className="flex-1 glass-card overflow-hidden rounded-xl min-h-0">
           {loading ? (
             <div className="h-full flex items-center justify-center">
-              <LoadingSpinner text="Loading map data..." />
+              <LoadingSpinner text={`Loading ${selectedCity} map…`} />
             </div>
           ) : (
-            <AQIMap wards={wards} height="100%" heatmap={showHeatmap} />
+            <AQIMap
+              wards={wards}
+              center={[centre.lat, centre.lng]}
+              zoom={zoom}
+              height="100%"
+              heatmap={showHeatmap}
+            />
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* Legend + ward rankings */}
         <div className="w-60 flex flex-col gap-3 flex-shrink-0">
-          {/* Legend */}
           <div className="glass-card p-4 flex-shrink-0">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               AQI Legend
@@ -157,10 +173,9 @@ export default function AQIMapPage() {
             </div>
           </div>
 
-          {/* Ward list */}
           <div className="glass-card p-4 flex-1 overflow-y-auto min-h-0">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Ward Rankings
+              Ward Rankings · {selectedCity}
             </h3>
             <div className="space-y-2">
               {[...wards]

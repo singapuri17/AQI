@@ -1,88 +1,92 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/common/Sidebar'
+import CitySelector from '../components/common/CitySelector'
 import { aqiAPI } from '../api'
-import { useAuthStore } from '../store/authStore'
+import { useCityStore, filterWardsByCity } from '../store/cityStore'
 import StatCard from '../components/common/StatCard'
 import AQIBadge from '../components/common/AQIBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import AQITrendChart from '../components/charts/AQITrendChart'
 import {
-  CloudIcon, MapIcon, ChartBarIcon, HeartIcon, BuildingOffice2Icon
+  CloudIcon, MapIcon, ChartBarIcon, HeartIcon, BuildingOffice2Icon,
+  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { getAQICategory } from '../utils/aqiUtils'
-import { format, subDays, startOfDay } from 'date-fns'
+import { format, subDays } from 'date-fns'
 
-// Build a stable 7-day trend from the ward array (no Math.random)
+// Build a stable 7-day trend from the ward array
 function buildTrend(wards) {
   if (!wards || wards.length === 0) return []
-
-  // Average AQI across all wards for each of the last 7 days
-  // Since we only have current snapshots (not 7-day history here),
-  // we simulate a plausible curve based on the current avg with small
-  // deterministic variation using ward count as a stable seed
-  const avgNow = wards.reduce((s, w) => s + (w.aqi_value ?? w.aqi ?? 0), 0) / wards.length
-  const seed = Math.round(avgNow)                    // stable: same data → same chart
-
-  // Deterministic offset pattern (no Math.random — same every render)
-  const offsets = [8, 12, -6, -14, 4, 18, 0]         // fixed day-by-day variation
-
+  const avgNow  = wards.reduce((s, w) => s + (w.aqi_value ?? w.aqi ?? 0), 0) / wards.length
+  const offsets = [8, 12, -6, -14, 4, 18, 0]
   return Array.from({ length: 7 }, (_, i) => ({
     time: format(subDays(new Date(), 6 - i), 'MMM d'),
     aqi:  Math.max(20, Math.round(avgNow + offsets[i])),
   }))
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard overview — shown at /citizen
+// ─────────────────────────────────────────────────────────────────────────────
 function DashboardOverview() {
-  const [wards, setWards]         = useState([])
-  const [trendData, setTrendData] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const { user } = useAuthStore()
+  const [wards, setWards]     = useState([])
+  const [trendData, setTrend] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const { selectedCity }      = useCityStore()
 
   useEffect(() => {
-    const fetchData = async () => {
+    let cancelled = false
+    const fetch = async () => {
       setLoading(true)
+      setError(null)
       try {
-        const res  = await aqiAPI.getCurrentAQI()
-        // Backend returns a flat array of ward AQI records
-        const list = Array.isArray(res.data) ? res.data : []
-        setWards(list)
-        setTrendData(buildTrend(list))
+        // Pass the city param so the backend can pre-filter if it supports it;
+        // filterWardsByCity is a client-side safety net for when it doesn't.
+        const res  = await aqiAPI.getCurrentAQI(selectedCity)
+        const all  = Array.isArray(res.data) ? res.data : []
+        const city = filterWardsByCity(all, selectedCity)
+        if (!cancelled) {
+          setWards(city)
+          setTrend(buildTrend(city))
+        }
       } catch (e) {
-        console.error('Dashboard AQI fetch error:', e)
-        setWards([])
-        setTrendData([])
+        if (!cancelled) {
+          console.error('Dashboard AQI fetch error:', e)
+          setError('Could not load AQI data. Make sure the backend is running.')
+          setWards([])
+          setTrend([])
+        }
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
-    fetchData()
-  }, [])   // ← runs once on mount, NOT on every render
+    fetch()
+    return () => { cancelled = true }
+  }, [selectedCity])
 
-  // ── Compute stats from the ward array ─────────────────────────────
-  const validWards = wards.filter(w => (w.aqi_value ?? w.aqi) > 0)
+  const validWards = wards.filter(w => (w.aqi_value ?? w.aqi ?? 0) > 0)
 
   const avgAQI = validWards.length
     ? validWards.reduce((s, w) => s + (w.aqi_value ?? w.aqi ?? 0), 0) / validWards.length
     : 0
 
   const worstWard = validWards.length
-    ? validWards.reduce((a, b) =>
-        (a.aqi_value ?? a.aqi) > (b.aqi_value ?? b.aqi) ? a : b)
+    ? validWards.reduce((a, b) => (a.aqi_value ?? a.aqi) > (b.aqi_value ?? b.aqi) ? a : b)
     : null
 
   const bestWard = validWards.length
-    ? validWards.reduce((a, b) =>
-        (a.aqi_value ?? a.aqi) < (b.aqi_value ?? b.aqi) ? a : b)
+    ? validWards.reduce((a, b) => (a.aqi_value ?? a.aqi) < (b.aqi_value ?? b.aqi) ? a : b)
     : null
 
   const avgCategory = getAQICategory(avgAQI)
 
   const quickLinks = [
-    { to: '/citizen/map',         icon: MapIcon,              label: 'AQI Map',       desc: 'Live air quality across all wards',     color: 'blue'   },
-    { to: '/citizen/predictions', icon: ChartBarIcon,         label: 'AI Predictions',desc: '7-day AQI forecasts powered by ML',     color: 'purple' },
-    { to: '/citizen/health',      icon: HeartIcon,            label: 'Health Risk',   desc: 'Personalised health risk assessment',   color: 'red'    },
-    { to: '/citizen/hospitals',   icon: BuildingOffice2Icon,  label: 'Hospitals',     desc: 'Find emergency medical facilities',     color: 'green'  },
+    { to: '/citizen/map',         icon: MapIcon,             label: 'AQI Map',        desc: 'Live air quality across all wards',    color: 'blue'   },
+    { to: '/citizen/predictions', icon: ChartBarIcon,        label: 'AI Predictions', desc: '7-day AQI forecasts powered by ML',    color: 'purple' },
+    { to: '/citizen/health',      icon: HeartIcon,           label: 'Health Risk',    desc: 'Personalised health risk assessment',  color: 'red'    },
+    { to: '/citizen/hospitals',   icon: BuildingOffice2Icon, label: 'Hospitals',      desc: 'Find emergency medical facilities',    color: 'green'  },
   ]
 
   const colorCard = {
@@ -92,41 +96,47 @@ function DashboardOverview() {
     green:  'from-emerald-600/15 to-emerald-500/5 border-emerald-500/20 text-emerald-400',
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner text="Loading dashboard..." />
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <LoadingSpinner text={`Loading ${selectedCity} data…`} />
+    </div>
+  )
+
+  if (error) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-3">
+      <ExclamationCircleIcon className="w-10 h-10 text-red-400" />
+      <p className="text-red-400 font-medium">{error}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+      >
+        Retry
+      </button>
+    </div>
+  )
 
   const greet = new Date().getHours() < 12 ? 'Morning'
               : new Date().getHours() < 18 ? 'Afternoon'
               : 'Evening'
-  const firstName = (user?.full_name || user?.name)?.split(' ')[0] || 'Citizen'
 
   return (
     <div className="space-y-6">
       {/* Greeting */}
       <div>
-        <h1 className="text-2xl font-bold text-white">
-          Good {greet}, {firstName}
-        </h1>
+        <h1 className="text-2xl font-bold text-white">Good {greet}</h1>
         <p className="text-gray-400 text-sm mt-1">
-          Air quality overview for Ahmedabad · {format(new Date(), 'EEEE, MMMM d')}
+          Air quality overview for <span className="text-white font-medium">{selectedCity}</span>
+          {' · '}{format(new Date(), 'EEEE, MMMM d')}
           {validWards.length > 0 && ` · ${validWards.length} wards monitored`}
         </p>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* City Average */}
+        {/* City Average AQI */}
         <div
           className="glass-card p-5 flex items-center gap-4"
-          style={{
-            borderColor: `${avgCategory.color}33`,
-            background:  `${avgCategory.color}11`,
-          }}
+          style={{ borderColor: `${avgCategory.color}33`, background: `${avgCategory.color}11` }}
         >
           <div className="p-3 rounded-xl" style={{ background: `${avgCategory.color}22` }}>
             <CloudIcon className="w-7 h-7" style={{ color: avgCategory.color }} />
@@ -134,27 +144,23 @@ function DashboardOverview() {
           <div>
             <p className="text-gray-400 text-sm">City Average AQI</p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-3xl font-bold text-white">
-                {Math.round(avgAQI)}
-              </span>
+              <span className="text-3xl font-bold text-white">{Math.round(avgAQI)}</span>
               <AQIBadge value={avgAQI} size="sm" />
             </div>
           </div>
         </div>
 
-        {/* Worst Ward */}
         <StatCard
           icon={CloudIcon}
-          title="Worst Ward"
+          title="Most Polluted Ward"
           value={worstWard ? (worstWard.ward_name ?? worstWard.name ?? '—') : '—'}
           subtitle={worstWard ? `AQI ${Math.round(worstWard.aqi_value ?? worstWard.aqi ?? 0)}` : 'No data'}
           color="red"
         />
 
-        {/* Best Ward */}
         <StatCard
           icon={CloudIcon}
-          title="Best Ward"
+          title="Cleanest Ward"
           value={bestWard ? (bestWard.ward_name ?? bestWard.name ?? '—') : '—'}
           subtitle={bestWard ? `AQI ${Math.round(bestWard.aqi_value ?? bestWard.aqi ?? 0)}` : 'No data'}
           color="green"
@@ -165,13 +171,13 @@ function DashboardOverview() {
       {trendData.length > 0 && (
         <AQITrendChart
           data={trendData}
-          title="7-Day AQI Trend (City Average)"
+          title={`7-Day AQI Trend — ${selectedCity}`}
           color="#3b82f6"
           height={200}
         />
       )}
 
-      {/* Quick Access */}
+      {/* Quick access tiles */}
       <div>
         <h2 className="text-lg font-semibold text-white mb-4">Quick Access</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -192,18 +198,33 @@ function DashboardOverview() {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout wrapper — shown for /citizen and all sub-routes
+// ─────────────────────────────────────────────────────────────────────────────
 export default function CitizenDashboard() {
   const location = useLocation()
   const isRoot   = location.pathname === '/citizen'
+  const { selectedCity } = useCityStore()
 
   return (
     <div className="flex h-screen bg-gray-900 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-6 max-w-6xl mx-auto">
-          {isRoot ? <DashboardOverview /> : <Outlet />}
-        </div>
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Persistent city selector header */}
+        <header className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-b border-gray-700/50 bg-gray-900/80 backdrop-blur-md">
+          <p className="text-sm text-gray-400">
+            Viewing data for{' '}
+            <span className="text-white font-semibold">{selectedCity}</span>
+          </p>
+          <CitySelector />
+        </header>
+
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6 max-w-6xl mx-auto">
+            {isRoot ? <DashboardOverview /> : <Outlet />}
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

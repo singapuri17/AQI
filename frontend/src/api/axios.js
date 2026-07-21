@@ -21,8 +21,8 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Only redirect to /login on 401 if we are NOT on an auth endpoint
-// This prevents redirect loops during login/register flows
+// Only redirect to /login on 401 if we are on a government/protected route
+// Citizens on public routes should never be force-redirected to login
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -30,9 +30,12 @@ axiosInstance.interceptors.response.use(
       error.config?.url?.includes('/auth/login') ||
       error.config?.url?.includes('/auth/register')
 
-    if (error.response?.status === 401 && !isAuthEndpoint) {
+    const isPublicPath =
+      window.location.pathname === '/' ||
+      window.location.pathname.startsWith('/citizen')
+
+    if (error.response?.status === 401 && !isAuthEndpoint && !isPublicPath) {
       useAuthStore.getState().logout()
-      // Only redirect if not already on login page
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
       }

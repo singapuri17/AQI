@@ -17,12 +17,25 @@ class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=2, max_length=255)
     password: str = Field(..., min_length=6)
-    role: str = Field(default="citizen", pattern="^(citizen|government)$")
+    role: str = Field(default="citizen", pattern="^(citizen|OFFICER|ADMIN)$")
     ward_id: Optional[str] = None
     ward_name: Optional[str] = None
     city: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
+
+
+class OfficerCreate(BaseModel):
+    """Payload for admin to register a new government officer."""
+
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=255)
+    password: str = Field(..., min_length=6)
+    city: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -44,6 +57,8 @@ class UserResponse(BaseModel):
     city: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
     is_active: bool
     created_at: datetime
 

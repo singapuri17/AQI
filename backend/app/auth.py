@@ -100,10 +100,20 @@ async def get_current_user(
 
 
 async def get_current_government_user(current_user=Depends(get_current_user)):
-    """Require government role. Raises HTTP 403 otherwise."""
-    if current_user.role != "government":
+    """Require OFFICER role. Raises HTTP 403 otherwise."""
+    if current_user.role != "OFFICER":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted to government users",
+            detail="Access restricted to government officers",
+        )
+    return current_user
+
+
+async def get_current_admin_user(current_user=Depends(get_current_user)):
+    """Require ADMIN role. Raises HTTP 403 otherwise."""
+    if current_user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to administrators",
         )
     return current_user

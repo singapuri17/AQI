@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { hospitalsAPI } from '../../api'
 import HospitalMap from '../../components/maps/HospitalMap'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
-import { BuildingOffice2Icon, PhoneIcon, MapPinIcon, SignalIcon } from '@heroicons/react/24/outline'
+import { BuildingOffice2Icon, PhoneIcon, MapPinIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useCityStore, CITY_CENTRES } from '../../store/cityStore'
 
@@ -26,12 +26,13 @@ export default function HospitalsPage() {
   const [hospitals, setHospitals]           = useState([])
   const [counts, setCounts]                 = useState({ 2: 0, 5: 0, 10: 0, 20: 0 })
   const [loading, setLoading]               = useState(false)
-  const [locating, setLocating]             = useState(false)
   const [selectedRadius, setSelectedRadius] = useState(5)
-  const [userLocation, setUserLocation]     = useState(null)
-  const [locationError, setLocationError]   = useState(null)
   const [selected, setSelected]             = useState(null)
-  const { selectedCity } = useCityStore()
+  const { selectedCity, userLocation }       = useCityStore()
+
+  // City centre used as fallback when GPS is not available
+  const cityLocation = CITY_CENTRES[selectedCity] ?? CITY_CENTRES.Ahmedabad
+  const origin = userLocation ?? cityLocation
 
   const fetchNearby = useCallback(async (loc, radius) => {
     setLoading(true)
@@ -39,8 +40,7 @@ export default function HospitalsPage() {
       const res = await hospitalsAPI.getNearbyHospitals(loc.lat, loc.lng, radius)
       const raw = Array.isArray(res.data) ? res.data : []
       setHospitals(raw.map(normalise).filter(h => h.lat && h.lng))
-    } catch (e) {
-      console.error('Hospitals load error:', e)
+    } catch {
       setHospitals([])
     } finally {
       setLoading(false)
@@ -52,59 +52,28 @@ export default function HospitalsPage() {
       const results = await Promise.all(
         RADII.map(r => hospitalsAPI.getNearbyHospitals(loc.lat, loc.lng, r))
       )
-      const newCounts = {}
+      const next = {}
       RADII.forEach((r, i) => {
-        newCounts[r] = Array.isArray(results[i].data) ? results[i].data.length : 0
+        next[r] = Array.isArray(results[i].data) ? results[i].data.length : 0
       })
-      setCounts(newCounts)
-    } catch (e) {
-      console.error('Count fetch error:', e)
+      setCounts(next)
+    } catch {
+      // counts stay at 0 — non-critical
     }
   }, [])
 
-  const getUserLocation = useCallback((cityFallback) => {
-    const fallback = cityFallback || CITY_CENTRES[selectedCity]
-    if (!navigator.geolocation) {
-      setLocationError(`Location not supported. Showing hospitals near ${selectedCity} centre.`)
-      setUserLocation(fallback)
-      fetchNearby(fallback, selectedRadius)
-      fetchCounts(fallback)
-      return
-    }
-    setLocating(true)
-    setLocationError(null)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setUserLocation(loc)
-        setLocating(false)
-        fetchNearby(loc, selectedRadius)
-        fetchCounts(loc)
-      },
-      () => {
-        setLocating(false)
-        setLocationError(`Could not get your location. Showing hospitals near ${selectedCity} centre.`)
-        setUserLocation(fallback)
-        fetchNearby(fallback, selectedRadius)
-        fetchCounts(fallback)
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    )
-  }, [selectedCity, selectedRadius, fetchNearby, fetchCounts])
-
-  // Re-fetch when city changes
+  // Re-fetch when selected city OR user GPS location changes
   useEffect(() => {
-    setUserLocation(null)
     setHospitals([])
+    setSelected(null)
     setCounts({ 2: 0, 5: 0, 10: 0, 20: 0 })
-    setLocationError(null)
-    getUserLocation(CITY_CENTRES[selectedCity])
-  }, [selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchNearby(origin, selectedRadius)
+    fetchCounts(origin)
+  }, [selectedCity, userLocation]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRadiusChange = (r) => {
     setSelectedRadius(r)
-    const loc = userLocation ?? CITY_CENTRES[selectedCity]
-    fetchNearby(loc, r)
+    fetchNearby(origin, r)
   }
 
   return (
@@ -114,56 +83,45 @@ export default function HospitalsPage() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <BuildingOffice2Icon className="w-6 h-6 text-emerald-400" />
-            Nearby Hospitals
+            Hospitals
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">
-            Medical facilities in <span className="text-white font-medium">{selectedCity}</span>
-            {userLocation && ' · based on your location'}
+            Medical facilities in{' '}
+            <span className="text-white font-medium">{selectedCity}</span>
           </p>
-          {locationError && <p className="text-yellow-400 text-xs mt-1">⚠ {locationError}</p>}
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => getUserLocation()}
-            disabled={locating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 transition-colors disabled:opacity-50"
-          >
-            <SignalIcon className="w-4 h-4" />
-            {locating ? 'Locating…' : 'Use My Location'}
-          </button>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">Show within:</span>
-            {RADII.map(r => (
-              <button
-                key={r}
-                onClick={() => handleRadiusChange(r)}
-                className={clsx(
-                  'relative px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border',
+        {/* Radius selector */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-gray-400">Show within:</span>
+          {RADII.map(r => (
+            <button
+              key={r}
+              onClick={() => handleRadiusChange(r)}
+              className={clsx(
+                'relative px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border',
+                selectedRadius === r
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+              )}
+            >
+              {r} km
+              {counts[r] > 0 && (
+                <span className={clsx(
+                  'absolute -top-2 -right-2 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold border',
                   selectedRadius === r
-                    ? 'bg-emerald-600 text-white border-emerald-500'
-                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
-                )}
-              >
-                {r} km
-                {counts[r] > 0 && (
-                  <span className={clsx(
-                    'absolute -top-2 -right-2 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold border',
-                    selectedRadius === r
-                      ? 'bg-white text-emerald-700 border-emerald-300'
-                      : 'bg-emerald-600 text-white border-emerald-500'
-                  )}>
-                    {counts[r]}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+                    ? 'bg-white text-emerald-700 border-emerald-300'
+                    : 'bg-emerald-600 text-white border-emerald-500'
+                )}>
+                  {counts[r]}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Count summary cards */}
       <div className="grid grid-cols-4 gap-3">
         {RADII.map(r => (
           <button
@@ -184,26 +142,30 @@ export default function HospitalsPage() {
         ))}
       </div>
 
-      {loading || locating ? (
+      {/* Map + list */}
+      {loading ? (
         <div className="glass-card h-96 flex items-center justify-center">
-          <LoadingSpinner text={locating ? `Locating in ${selectedCity}…` : 'Loading hospitals…'} />
+          <LoadingSpinner text={`Loading hospitals in ${selectedCity}…`} />
         </div>
       ) : (
         <div className="grid lg:grid-cols-2 gap-4" style={{ minHeight: 500 }}>
+          {/* Map — centred on city, no user pin */}
           <div className="glass-card overflow-hidden" style={{ height: '55vh', minHeight: 400 }}>
             <HospitalMap
               hospitals={hospitals}
               userLocation={userLocation}
+              center={[cityLocation.lat, cityLocation.lng]}
               selectedHospital={selected}
               radius={selectedRadius}
               height="100%"
             />
           </div>
 
+          {/* Hospital list */}
           <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '55vh' }}>
             <p className="text-sm text-gray-400 flex-shrink-0">
               {hospitals.length} hospital{hospitals.length !== 1 ? 's' : ''} within {selectedRadius} km
-              {userLocation && ` of your location`}
+              {' '}of <span className="text-white font-medium">{userLocation ? 'your location' : `${selectedCity} centre`}</span>
             </p>
 
             {hospitals.length === 0 ? (
@@ -234,19 +196,20 @@ export default function HospitalsPage() {
                       </div>
                       {h.address && (
                         <p className="text-xs text-gray-400 flex items-center gap-1 mb-0.5">
-                          <MapPinIcon className="w-3 h-3 flex-shrink-0" />{h.address}
+                          <MapPinIcon className="w-3 h-3 flex-shrink-0" />
+                          {h.address}
                         </p>
                       )}
                       {h.phone && (
                         <p className="text-xs text-gray-400 flex items-center gap-1">
-                          <PhoneIcon className="w-3 h-3 flex-shrink-0" />{h.phone}
+                          📞 {h.phone}
                         </p>
                       )}
                     </div>
                     {h.distance != null && (
                       <div className="text-right flex-shrink-0">
                         <p className="text-sm font-bold text-emerald-400">{h.distance.toFixed(1)} km</p>
-                        <p className="text-xs text-gray-500">away</p>
+                        <p className="text-xs text-gray-500">{userLocation ? 'from your location' : 'from centre'}</p>
                       </div>
                     )}
                   </div>

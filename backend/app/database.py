@@ -32,13 +32,14 @@ _is_sqlite = "sqlite" in settings.database_url
 # SQLite-specific connection args — required to allow async usage
 _connect_args: dict = {"check_same_thread": False} if _is_sqlite else {}
 
+# pool_size and max_overflow are not supported by SQLite's NullPool
+_pool_kwargs: dict = {} if _is_sqlite else {"pool_size": 5, "max_overflow": 10}
+
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,          # set DEBUG=true in .env to see SQL
     connect_args=_connect_args,
-    # For SQLite keep one connection in the pool to avoid locking issues
-    pool_size=1 if _is_sqlite else 5,
-    max_overflow=0 if _is_sqlite else 10,
+    **_pool_kwargs,
 )
 
 

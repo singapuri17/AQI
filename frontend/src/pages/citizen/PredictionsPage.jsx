@@ -4,141 +4,196 @@ import PredictionChart from '../../components/charts/PredictionChart'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import AQIBadge from '../../components/common/AQIBadge'
 import { ChartBarIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
-import { getAQICategory } from '../../utils/aqiUtils'
 import { addHours, addDays, format } from 'date-fns'
 import toast from 'react-hot-toast'
-
-const WARDS = [
-  { id: 1, name: 'Naroda' }, { id: 2, name: 'Vatva' }, { id: 3, name: 'Nikol' },
-  { id: 4, name: 'Gota' }, { id: 5, name: 'Bopal' }, { id: 6, name: 'Satellite' },
-  { id: 7, name: 'Navrangpura' }, { id: 8, name: 'Maninagar' }, { id: 9, name: 'Vastral' },
-  { id: 10, name: 'Chandkheda' }, { id: 11, name: 'Ghatlodia' }, { id: 12, name: 'Thaltej' },
-]
+import { useCityStore, filterWardsByCity } from '../../store/cityStore'
 
 const HORIZONS = [
-  { label: '24 Hours', value: 24, unit: 'hour' },
-  { label: '3 Days', value: 72, unit: '6h' },
-  { label: '7 Days', value: 168, unit: 'day' },
+  { label: '24 Hours', value: 24 },
+  { label: '3 Days',   value: 72 },
+  { label: '7 Days',   value: 168 },
 ]
 
-function generateMockPrediction(wardId, horizon) {
-  const base = 80 + wardId * 8
-  const now = new Date()
+function mockPrediction(wardId, horizon) {
+  const base = 80 + (wardId % 20) * 8
   const step = horizon <= 24 ? 1 : horizon <= 72 ? 6 : 24
-  const fmt = horizon <= 24 ? "HH:mm" : "MMM d"
+  const fmt  = horizon <= 24 ? 'HH:mm' : 'MMM d'
   const addFn = horizon <= 24 ? addHours : addDays
-  const steps = horizon / step
+  const divisor = horizon <= 24 ? 1 : horizon <= 72 ? 6 : 24
+  const steps = Math.round(horizon / divisor)
   return Array.from({ length: steps }, (_, i) => {
-    const predicted = base + Math.sin(i * 0.5) * 30 + Math.random() * 20
+    const val = base + Math.sin(i * 0.5) * 30
     return {
-      time: format(addFn(now, i * (horizon <= 24 ? 1 : horizon <= 72 ? 0.25 : 1)), fmt),
-      predicted: Math.max(20, Math.round(predicted)),
-      upper: Math.max(30, Math.round(predicted + 20)),
-      lower: Math.max(10, Math.round(predicted - 20)),
+      time:      format(addFn(new Date(), i), fmt),
+      predicted: Math.max(20, Math.round(val)),
+      upper:     Math.max(30, Math.round(val + 20)),
+      lower:     Math.max(10, Math.round(val - 20)),
     }
   })
 }
 
 export default function PredictionsPage() {
-  const [selectedWard, setSelectedWard] = useState(WARDS[0])
-  const [selectedHorizon, setSelectedHorizon] = useState(HORIZONS[0])
-  const [predictions, setPredictions] = useState([])
-  const [metrics, setMetrics] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const { selectedCity }  = useCityStore()
+  const [cityWards, setCityWards]         = useState([])
+  const [selectedWard, setSelectedWard]   = useState(null)
+  const [selectedHorizon, setHorizon]     = useState(HORIZONS[0])
+  const [predictions, setPredictions]     = useState([])
+  const [metrics, setMetrics]             = useState(null)
+  const [loading, setLoading]             = useState(false)
+  const [wardsLoading, setWardsLoading]   = useState(true)
   const [metricsLoading, setMetricsLoading] = useState(false)
 
-  const fetchPredictions = async () => {
+  // ── Load ward list for the selected city ──────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const loadWards = async () => {
+      setWardsLoading(true)
+      setSelectedWard(null)
+      setPredictions([])
+      try {
+        const res  = await aqiAPI.getCurrentAQI(selectedCity)
+        const all  = Array.isArray(res.data) ? res.data : []
+        const city = filterWardsByCity(all, selectedCity)
+        if (!cancelled) {
+          setCityWards(city)
+          if (city.length > 0) setSelectedWard(city[0])
+        }
+      } catch {
+        if (!cancelled) {
+          setCityWards([])
+          setSelectedWard(null)
+        }
+      } finally {
+        if (!cancelled) setWardsLoading(false)
+      }
+    }
+    loadWards()
+    return () => { cancelled = true }
+  }, [selectedCity])
+
+  // ── Fetch predictions whenever ward or horizon changes ────────────
+  const fetchPredictions = async (ward, horizon) => {
+    if (!ward) return
     setLoading(true)
     try {
-      const res = await predictionsAPI.generatePrediction(selectedWard.id, selectedHorizon.value)
+      const res  = await predictionsAPI.generatePrediction(ward.ward_id, horizon.value)
       const data = res.data
       if (Array.isArray(data?.predictions)) {
         setPredictions(data.predictions.map(d => ({
-          time: format(new Date(d.timestamp), selectedHorizon.value <= 24 ? 'HH:mm' : 'MMM d'),
+          time:      format(new Date(d.timestamp), horizon.value <= 24 ? 'HH:mm' : 'MMM d'),
           predicted: Math.round(d.predicted_aqi),
-          upper: d.upper ? Math.round(d.upper) : undefined,
-          lower: d.lower ? Math.round(d.lower) : undefined,
+          upper:     d.upper  ? Math.round(d.upper)  : undefined,
+          lower:     d.lower  ? Math.round(d.lower)  : undefined,
         })))
       } else {
-        setPredictions(generateMockPrediction(selectedWard.id, selectedHorizon.value))
+        setPredictions(mockPrediction(ward.ward_id?.replace(/\D/g, '') || 1, horizon.value))
       }
     } catch {
-      setPredictions(generateMockPrediction(selectedWard.id, selectedHorizon.value))
+      setPredictions(mockPrediction(ward.ward_id?.replace(/\D/g, '') || 1, horizon.value))
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchMetrics = async () => {
+  useEffect(() => {
+    if (selectedWard) fetchPredictions(selectedWard, selectedHorizon)
+  }, [selectedWard, selectedHorizon]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load model accuracy metrics once ─────────────────────────────
+  useEffect(() => {
     setMetricsLoading(true)
-    try {
-      const res = await predictionsAPI.getAccuracyMetrics()
-      setMetrics(res.data)
-    } catch {
-      setMetrics({ mae: 12.4, rmse: 18.7, r2: 0.87, accuracy_pct: 88.3 })
-    } finally {
-      setMetricsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchPredictions()
-  }, [selectedWard, selectedHorizon])
-
-  useEffect(() => {
-    fetchMetrics()
+    predictionsAPI.getAccuracyMetrics()
+      .then(r => {
+        const data = r.data
+        // Backend returns { random_forest: {mae,rmse,r2}, xgboost: {mae,rmse,r2} }
+        // Prefer xgboost; fall back to random_forest; fall back to flat shape.
+        const src = data?.xgboost ?? data?.random_forest ?? data ?? {}
+        const mae  = src.mae  ?? data?.mae
+        const rmse = src.rmse ?? data?.rmse
+        const r2   = src.r2   ?? data?.r2
+        // accuracy_pct not returned by backend — derive from R² if available
+        const accuracy_pct = data?.accuracy_pct ?? (r2 != null ? +(r2 * 100).toFixed(1) : null)
+        setMetrics({ mae, rmse, r2, accuracy_pct })
+      })
+      .catch(() => setMetrics({ mae: 12.4, rmse: 18.7, r2: 0.87, accuracy_pct: 88.3 }))
+      .finally(() => setMetricsLoading(false))
   }, [])
 
   const aqiValues = predictions.map(p => p.predicted)
   const minAQI = aqiValues.length ? Math.min(...aqiValues) : 0
   const maxAQI = aqiValues.length ? Math.max(...aqiValues) : 0
-  const avgAQI = aqiValues.length ? Math.round(aqiValues.reduce((a, b) => a + b, 0) / aqiValues.length) : 0
+  const avgAQI = aqiValues.length
+    ? Math.round(aqiValues.reduce((a, b) => a + b, 0) / aqiValues.length) : 0
+
+  const wardLabel = selectedWard
+    ? (selectedWard.ward_name ?? selectedWard.name ?? selectedWard.ward_id ?? 'Ward')
+    : '—'
 
   return (
     <div className="space-y-6">
+      {/* Page header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <ChartBarIcon className="w-6 h-6 text-blue-400" />
             AQI Predictions
           </h1>
-          <p className="text-gray-400 text-sm mt-0.5">AI-powered air quality forecasts</p>
+          <p className="text-gray-400 text-sm mt-0.5">
+            AI-powered forecasts · <span className="text-white font-medium">{selectedCity}</span>
+          </p>
         </div>
         <button
+          disabled={!selectedWard || loading}
           onClick={() => {
-            toast.promise(fetchPredictions(), {
-              loading: 'Generating prediction...',
+            toast.promise(fetchPredictions(selectedWard, selectedHorizon), {
+              loading: 'Generating prediction…',
               success: 'Prediction ready',
-              error: 'Prediction failed',
+              error:   'Prediction failed',
             })
           }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
         >
           <ArrowPathIcon className="w-4 h-4" />
           Generate
         </button>
       </div>
 
+      {/* Controls */}
       <div className="flex flex-wrap gap-4">
+        {/* Ward selector — populated from the selected city */}
         <div className="flex-1 min-w-[200px]">
-          <label className="label-text">Select Ward</label>
-          <select
-            className="input-field"
-            value={selectedWard.id}
-            onChange={e => setSelectedWard(WARDS.find(w => w.id === Number(e.target.value)))}
-          >
-            {WARDS.map(w => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
-          </select>
+          <label className="label-text">Select Ward · {selectedCity}</label>
+          {wardsLoading ? (
+            <div className="input-field flex items-center gap-2 text-gray-400 text-sm">
+              <span className="w-3 h-3 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin" />
+              Loading wards…
+            </div>
+          ) : (
+            <select
+              className="input-field"
+              value={selectedWard?.ward_id ?? ''}
+              onChange={e => setSelectedWard(cityWards.find(w => w.ward_id === e.target.value) ?? null)}
+            >
+              {cityWards.map(w => (
+                <option key={w.ward_id} value={w.ward_id}>
+                  {w.ward_name ?? w.name ?? w.ward_id}
+                </option>
+              ))}
+              {cityWards.length === 0 && (
+                <option disabled value="">No wards available</option>
+              )}
+            </select>
+          )}
         </div>
+
+        {/* Horizon selector */}
         <div className="flex-1 min-w-[260px]">
           <label className="label-text">Forecast Horizon</label>
           <div className="flex gap-2">
             {HORIZONS.map(h => (
               <button
                 key={h.value}
-                onClick={() => setSelectedHorizon(h)}
+                onClick={() => setHorizon(h)}
                 className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
                   selectedHorizon.value === h.value
                     ? 'bg-blue-600 border-blue-500 text-white'
@@ -152,17 +207,19 @@ export default function PredictionsPage() {
         </div>
       </div>
 
-      {loading ? (
+      {/* Chart */}
+      {loading || wardsLoading ? (
         <div className="glass-card h-72 flex items-center justify-center">
-          <LoadingSpinner text="Generating AI prediction..." />
+          <LoadingSpinner text={wardsLoading ? `Loading ${selectedCity} wards…` : 'Generating AI prediction…'} />
         </div>
       ) : (
         <PredictionChart
           data={predictions}
-          title={`${selectedWard.name} — ${selectedHorizon.label} AQI Forecast`}
+          title={`${wardLabel} — ${selectedHorizon.label} AQI Forecast`}
         />
       )}
 
+      {/* Summary stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Min Predicted', value: minAQI, desc: 'Best expected AQI' },
@@ -178,6 +235,7 @@ export default function PredictionsPage() {
         ))}
       </div>
 
+      {/* Model accuracy */}
       <div className="glass-card p-5">
         <h3 className="text-sm font-semibold text-gray-300 mb-4">Model Accuracy Metrics</h3>
         {metricsLoading ? (
@@ -185,10 +243,10 @@ export default function PredictionsPage() {
         ) : metrics ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: 'MAE', value: metrics.mae?.toFixed(2) ?? '--', desc: 'Mean Absolute Error', color: 'text-blue-400' },
-              { label: 'RMSE', value: metrics.rmse?.toFixed(2) ?? '--', desc: 'Root Mean Square Error', color: 'text-purple-400' },
-              { label: 'R²', value: metrics.r2?.toFixed(3) ?? '--', desc: 'Coefficient of Determination', color: 'text-emerald-400' },
-              { label: 'Accuracy', value: `${metrics.accuracy_pct?.toFixed(1) ?? '--'}%`, desc: '±20 AQI threshold', color: 'text-yellow-400' },
+              { label: 'MAE',      value: metrics.mae?.toFixed(2)               ?? '--', desc: 'Mean Absolute Error (lower = better)',    color: 'text-blue-400'   },
+              { label: 'RMSE',     value: metrics.rmse?.toFixed(2)              ?? '--', desc: 'Root Mean Square Error (lower = better)',  color: 'text-purple-400' },
+              { label: 'R²',       value: metrics.r2?.toFixed(3)                ?? '--', desc: 'Coefficient of Determination (1 = best)',  color: 'text-emerald-400'},
+              { label: 'Accuracy', value: metrics.accuracy_pct != null ? `${metrics.accuracy_pct.toFixed(1)}%` : '--', desc: 'Based on R² score', color: 'text-yellow-400' },
             ].map(({ label, value, desc, color }) => (
               <div key={label} className="bg-gray-800/50 rounded-xl p-4 text-center border border-gray-700/50">
                 <p className={`text-2xl font-bold ${color}`}>{value}</p>
