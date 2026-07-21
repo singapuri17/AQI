@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models import AQIData, EvidenceReport, GovernmentAction
 from app.schemas import (
     GovernmentActionCreate,
+    GovernmentActionStatusUpdate,
     GovernmentActionResponse,
     ReportGenerationRequest,
     ReportResponse,
@@ -89,8 +90,35 @@ async def create_action(
     return GovernmentActionResponse.model_validate(action)
 
 
-@router.get(
-    "/recommendations",
+@router.patch(
+    "/actions/{action_id}/status",
+    response_model=GovernmentActionResponse,
+    summary="Update the status of a government action",
+)
+async def update_action_status(
+    action_id: int,
+    payload: GovernmentActionStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_government_user),
+):
+    """Change the status of an existing action (pending → in_progress → completed / cancelled)."""
+    from datetime import datetime, timezone
+    result = await db.execute(
+        select(GovernmentAction).where(GovernmentAction.id == action_id)
+    )
+    action = result.scalar_one_or_none()
+    if not action:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Action not found")
+
+    action.status = payload.status
+    if payload.status == "completed":
+        action.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(action)
+    return GovernmentActionResponse.model_validate(action)
+
+
+
     summary="Get AI-generated government recommendations for the city",
 )
 async def get_recommendations(

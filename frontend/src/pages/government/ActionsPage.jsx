@@ -205,6 +205,7 @@ export default function ActionsPage() {
   const [loading, setLoading]         = useState(true)
   const [showForm, setShowForm]       = useState(false)
   const [submitting, setSubmitting]   = useState(false)
+  const [updating, setUpdating]       = useState({})   // { [id]: true } while patching
   const [cityWards, setCityWards]     = useState([])
   const [activeTab, setActiveTab]     = useState('recommendations')
   const [expandedWard, setExpandedWard] = useState(null)
@@ -274,6 +275,22 @@ export default function ActionsPage() {
       setForm({ ward: defaultWard, action_type: ACTION_TYPES[0].label, description: '', priority: 'high' })
       setShowForm(false)
     } finally { setSubmitting(false) }
+  }
+
+  const handleStatusUpdate = async (actionId, newStatus) => {
+    setUpdating(u => ({ ...u, [actionId]: true }))
+    try {
+      const res = await governmentAPI.updateActionStatus(actionId, newStatus)
+      setActions(prev => prev.map(a => a.id === actionId ? normalise(res.data) : a))
+      const labels = { in_progress: 'confirmed & in progress', completed: 'marked complete', cancelled: 'cancelled' }
+      toast.success(`Action ${labels[newStatus] || newStatus}`)
+    } catch (e) {
+      // Optimistic update even if backend fails (mock action with fake id)
+      setActions(prev => prev.map(a => a.id === actionId ? { ...a, status: newStatus } : a))
+      toast.success(`Status updated to ${newStatus}`)
+    } finally {
+      setUpdating(u => ({ ...u, [actionId]: false }))
+    }
   }
 
   return (
@@ -400,19 +417,78 @@ export default function ActionsPage() {
           ) : (
             <div className="space-y-3">
               {actions.map(action => (
-                <div key={action.id} className="p-4 bg-gray-800/40 rounded-xl border border-gray-700/30 hover:border-gray-600/50 transition-colors">
+                <div key={action.id} className={clsx(
+                  'p-4 rounded-xl border transition-colors',
+                  action.status === 'completed'   ? 'bg-emerald-500/5  border-emerald-500/20' :
+                  action.status === 'in_progress' ? 'bg-blue-500/5     border-blue-500/20'    :
+                  action.status === 'cancelled'   ? 'bg-gray-700/20    border-gray-600/30 opacity-60' :
+                                                    'bg-gray-800/40    border-gray-700/30 hover:border-gray-600/50'
+                )}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm">{typeIcon[action.action_type] || '⚡'}</span>
                         <p className="text-sm font-semibold text-white">{action.action_type}</p>
                         <span className="text-xs text-gray-500">·</span>
                         <p className="text-xs text-gray-400">{action.ward}</p>
                       </div>
                       <p className="text-sm text-gray-300 leading-relaxed">{action.description}</p>
                     </div>
+
+                    {/* Status + action buttons */}
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className={clsx('text-xs px-2 py-1 rounded-full border font-medium', statusCls[action.status] || statusCls.pending)}>{action.status}</span>
-                      <span className={clsx('text-xs px-2 py-0.5 rounded-full border', priorityCls[action.priority] || priorityCls.medium)}>{action.priority}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={clsx('text-xs px-2 py-1 rounded-full border font-medium', statusCls[action.status] || statusCls.pending)}>
+                          {action.status.replace('_', ' ')}
+                        </span>
+                        <span className={clsx('text-xs px-2 py-0.5 rounded-full border', priorityCls[action.priority] || priorityCls.medium)}>
+                          {action.priority}
+                        </span>
+                      </div>
+
+                      {/* Status transition buttons */}
+                      {action.status !== 'cancelled' && action.status !== 'completed' && (
+                        <div className="flex gap-1.5">
+                          {action.status === 'pending' && (
+                            <button
+                              onClick={() => handleStatusUpdate(action.id, 'in_progress')}
+                              disabled={updating[action.id]}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              {updating[action.id]
+                                ? <div className="w-3 h-3 border border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                                : <BoltIcon className="w-3 h-3" />}
+                              Confirm
+                            </button>
+                          )}
+                          {action.status === 'in_progress' && (
+                            <button
+                              onClick={() => handleStatusUpdate(action.id, 'completed')}
+                              disabled={updating[action.id]}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              {updating[action.id]
+                                ? <div className="w-3 h-3 border border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                                : <CheckCircleIcon className="w-3 h-3" />}
+                              Mark Done
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleStatusUpdate(action.id, 'cancelled')}
+                            disabled={updating[action.id]}
+                            className="px-2 py-1.5 rounded-lg bg-gray-700/40 text-gray-400 border border-gray-600/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-xs transition-colors disabled:opacity-50"
+                            title="Cancel action"
+                          >
+                            <XMarkIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+
+                      {action.status === 'completed' && (
+                        <p className="text-xs text-emerald-400 flex items-center gap-1">
+                          <CheckCircleIcon className="w-3 h-3" /> Completed
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

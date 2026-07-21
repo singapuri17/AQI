@@ -79,6 +79,7 @@ export const hotspotsAPI = {
 
 export const governmentAPI = {
   getActions: (city) => axios.get(city ? `/government/actions?city=${city}` : '/government/actions'),
+  updateActionStatus: (actionId, newStatus) => axios.patch(`/government/actions/${actionId}/status`, { status: newStatus }),
   // Map frontend-friendly fields to backend schema
   createAction: (data) => {
     const typeMap = {
