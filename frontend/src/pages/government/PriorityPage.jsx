@@ -5,6 +5,8 @@ import AQIBadge from '../../components/common/AQIBadge'
 import WardRankingChart from '../../components/charts/WardRankingChart'
 import { StarIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
+import { useCityStore } from '../../store/cityStore'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -47,12 +49,14 @@ export default function PriorityPage() {
   const [rows, setRows]     = useState([])
   const [loading, setLoading] = useState(true)
   const navigate            = useNavigate()
+  const { user }            = useAuthStore()
+  const { selectedCity }    = useCityStore()
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const res = await hotspotsAPI.getPriorityRanking()
+        const res = await hotspotsAPI.getPriorityRanking(user?.city || selectedCity || null)
         const raw = Array.isArray(res.data) ? res.data : []
         setRows(raw.map(normalise))
       } catch (e) {
@@ -63,7 +67,7 @@ export default function PriorityPage() {
       }
     }
     load()
-  }, [])
+  }, [user?.city, selectedCity])
 
   // Chart needs { ward, aqi }
   const chartData = rows.map(r => ({ ward: r.ward, aqi: r.aqi }))

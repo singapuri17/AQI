@@ -83,15 +83,23 @@ export default function Navbar() {
             {!isGovPath && (
               <div className="flex items-center gap-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-2 py-1">
                 <BuildingLibraryIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <select
-                  value={selectedCity}
-                  onChange={e => setCity(e.target.value)}
-                  className="bg-transparent text-sm text-white font-medium focus:outline-none cursor-pointer pr-1"
-                >
-                  {CITIES.map(c => (
-                    <option key={c} value={c} className="bg-gray-800 text-white">{c}</option>
-                  ))}
-                </select>
+                {user?.role === 'government' ? (
+                  // Government users are locked to their registered city
+                  <span className="text-sm text-white font-medium px-1">
+                    📍 {user.city || selectedCity}
+                  </span>
+                ) : (
+                  // Citizens can freely switch city
+                  <select
+                    value={selectedCity}
+                    onChange={e => setCity(e.target.value)}
+                    className="bg-transparent text-sm text-white font-medium focus:outline-none cursor-pointer pr-1"
+                  >
+                    {CITIES.map(c => (
+                      <option key={c} value={c} className="bg-gray-800 text-white">{c}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
 

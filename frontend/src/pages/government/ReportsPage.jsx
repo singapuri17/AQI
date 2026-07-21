@@ -5,33 +5,13 @@ import { DocumentTextIcon, ArrowDownTrayIcon, DocumentChartBarIcon } from '@hero
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useCityStore } from '../../store/cityStore'
+import { useAuthStore } from '../../store/authStore'
 
 const WARDS_BY_CITY = {
   Ahmedabad: ['AMD_W01','AMD_W02','AMD_W03','AMD_W04','AMD_W05','AMD_W06','AMD_W07','AMD_W08','AMD_W09','AMD_W10','AMD_W11','AMD_W12','AMD_W13','AMD_W14','AMD_W15','AMD_W16','AMD_W17','AMD_W18','AMD_W19','AMD_W20'],
   Surat:     ['SRT_W01','SRT_W02','SRT_W03','SRT_W04','SRT_W05','SRT_W06','SRT_W07','SRT_W08','SRT_W09','SRT_W10','SRT_W11','SRT_W12','SRT_W13','SRT_W14','SRT_W15'],
   Vadodara:  ['VDR_W01','VDR_W02','VDR_W03','VDR_W04','VDR_W05','VDR_W06','VDR_W07','VDR_W08','VDR_W09','VDR_W10','VDR_W11','VDR_W12','VDR_W13','VDR_W14','VDR_W15'],
 }
-
-const MOCK_REPORTS = [
-  {
-    id: 1, ward_id: 'Naroda', title: 'Naroda AQI Compliance Report — June 2024',
-    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-    summary: 'Ward Naroda exceeded AQI limits on 18/30 days. PM2.5 averaged 89 μg/m³, 3.6x safe limit. Primary sources: textile mills (42%), vehicle exhaust (28%). Recommended immediate industrial emission controls.',
-    status: 'ready',
-  },
-  {
-    id: 2, ward_id: 'Vatva', title: 'Vatva Chemical Zone Report — June 2024',
-    created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
-    summary: 'Chemical GIDC area showed dangerous SO₂ and NO₂ concentrations. 12 incidents of AQI > 200. Emergency response protocols activated twice. Compliance notices issued to 4 industrial units.',
-    status: 'ready',
-  },
-  {
-    id: 3, ward_id: 'Odhav', title: 'Odhav Monthly Environmental Report',
-    created_at: new Date(Date.now() - 8 * 86400000).toISOString(),
-    summary: 'Moderate improvement from previous month (-8 AQI avg). Water sprinkling interventions showed 12% reduction in PM10. Further industrial controls required for SO₂ compliance.',
-    status: 'ready',
-  },
-]
 
 export default function ReportsPage() {
   const [reports, setReports] = useState([])
@@ -41,36 +21,42 @@ export default function ReportsPage() {
   const [selectedWard, setSelectedWard] = useState('')
   const [previewReport, setPreviewReport] = useState(null)
   const { selectedCity } = useCityStore()
+  const { user } = useAuthStore()
 
-  // Load ward list for selected city from backend
+  // Use user's registered city as the authoritative source, fall back to cityStore
+  const city = user?.city || selectedCity || 'Ahmedabad'
+
+  // Load ward list for the user's city
   useEffect(() => {
-    aqiAPI.getWardList(selectedCity).then(res => {
+    setWards([])
+    setSelectedWard('')
+    aqiAPI.getWardList(city).then(res => {
       const list = Array.isArray(res.data) ? res.data : []
       setWards(list)
       if (list.length > 0) setSelectedWard(list[0].ward_id)
     }).catch(() => {
-      // fallback to static list
-      const fallback = (WARDS_BY_CITY[selectedCity] || []).map(id => ({ ward_id: id, ward_name: id }))
+      const fallback = (WARDS_BY_CITY[city] || []).map(id => ({ ward_id: id, ward_name: id }))
       setWards(fallback)
       if (fallback.length > 0) setSelectedWard(fallback[0].ward_id)
     })
-  }, [selectedCity])
+  }, [city])
 
   useEffect(() => {
     const fetchReports = async () => {
       setLoading(true)
       try {
-        const res = await governmentAPI.getReports()
+        const res = await governmentAPI.getReports(city)
         const data = res.data
-        setReports(Array.isArray(data) ? data : MOCK_REPORTS)
+        // Only show reports if we got real data; don't show Ahmedabad mock fallback
+        setReports(Array.isArray(data) && data.length > 0 ? data : [])
       } catch {
-        setReports(MOCK_REPORTS)
+        setReports([])
       } finally {
         setLoading(false)
       }
     }
     fetchReports()
-  }, [])
+  }, [city])
 
   const handleGenerate = async (e) => {
     e.preventDefault()
@@ -120,7 +106,10 @@ export default function ReportsPage() {
           <DocumentTextIcon className="w-6 h-6 text-purple-400" />
           Evidence Reports
         </h1>
-        <p className="text-gray-400 text-sm mt-0.5">Generate and download AI-powered environmental compliance reports</p>
+        <p className="text-gray-400 text-sm mt-0.5">
+          Generate and download AI-powered environmental compliance reports
+          {city && <span className="ml-2 text-purple-300 font-medium">· {city}</span>}
+        </p>
       </div>
 
       <div className="glass-card p-6">

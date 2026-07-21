@@ -1,5 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
+import { useCityStore } from './store/cityStore'
+import LandingPage from './pages/LandingPage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import CitizenDashboard from './pages/CitizenDashboard'
 
 import LandingPage        from './pages/LandingPage'
 import LoginPage          from './pages/LoginPage'
@@ -39,6 +45,13 @@ function OfficerRoute({ children }) {
 // ── App ───────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const { user } = useAuthStore()
+  const { syncToUser } = useCityStore()
+
+  // On app load, sync city to user's registered city
+  useEffect(() => {
+    if (user) syncToUser(user)
+  }, [user, syncToUser])
   return (
     <Routes>
       {/* ── Public ── */}

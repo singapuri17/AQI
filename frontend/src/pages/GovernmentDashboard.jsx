@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import WardRankingChart from '../components/charts/WardRankingChart'
 import { aqiAPI, hotspotsAPI, governmentAPI } from '../api'
 import { useAuthStore } from '../store/authStore'
+import { useCityStore } from '../store/cityStore'
 import {
   ExclamationTriangleIcon, ShieldCheckIcon, BoltIcon, DocumentTextIcon,
   BuildingStorefrontIcon, StarIcon
@@ -41,17 +42,18 @@ function GovernmentOverview() {
   const [stats, setStats]               = useState({ hotspots: 0, highRisk: 0, actions: 0, reports: 0 })
   const [loading, setLoading]           = useState(true)
   const { user } = useAuthStore()
+  const { selectedCity } = useCityStore()
 
   useEffect(() => {
+    const city = user?.city || selectedCity || null
     const loadAll = async () => {
       setLoading(true)
       try {
-        // Fetch everything in parallel
         const [aqiRes, hotspotsRes, actionsRes, priorityRes] = await Promise.allSettled([
-          aqiAPI.getCurrentAQI(),
-          hotspotsAPI.getHotspots(),
-          governmentAPI.getActions(),
-          hotspotsAPI.getPriorityRanking(),
+          aqiAPI.getCurrentAQI(city),
+          hotspotsAPI.getHotspots(city),
+          governmentAPI.getActions(city),
+          hotspotsAPI.getPriorityRanking(city),
         ])
 
         // ── AQI wards ─────────────────────────────────────────────────
@@ -97,7 +99,7 @@ function GovernmentOverview() {
       }
     }
     loadAll()
-  }, [])   // ← only runs once on mount
+  }, [user?.city, selectedCity])   // re-fetch when city changes
 
   const quickLinks = [
     { to: '/government/hotspots',  icon: ExclamationTriangleIcon, label: 'View Hotspots',   color: 'orange' },
@@ -121,6 +123,11 @@ function GovernmentOverview() {
         <h1 className="text-2xl font-bold text-white">Government Control Center</h1>
         <p className="text-gray-400 text-sm mt-1">
           Welcome, {user?.full_name || user?.name} · {format(new Date(), 'EEEE, MMMM d yyyy')}
+          {user?.city && (
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium">
+              📍 {user.city}
+            </span>
+          )}
         </p>
       </div>
 

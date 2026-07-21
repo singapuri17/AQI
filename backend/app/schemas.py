@@ -307,6 +307,12 @@ class GovernmentActionCreate(BaseModel):
     assigned_to: Optional[str] = None
 
 
+class GovernmentActionStatusUpdate(BaseModel):
+    """Payload to update the status of a government action."""
+
+    status: str = Field(..., pattern="^(pending|in_progress|completed|cancelled)$")
+
+
 class GovernmentActionResponse(BaseModel):
     """Government action returned to clients."""
 

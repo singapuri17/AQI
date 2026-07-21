@@ -54,20 +54,12 @@ async def lifespan(app: FastAPI):
 
 
 async def seed_data_if_empty() -> None:
-    """Populate the database with synthetic data if no AQI records exist.
-
-    This is useful for development and demonstration environments.
-    """
+    """Populate the database with synthetic data if no AQI records exist."""
     from sqlalchemy import select
 
+    from app.auth import get_password_hash
     from app.database import AsyncSessionLocal
-    from app.models import (
-        AQIData,
-        ConstructionSite,
-        Hospital,
-        Industry,
-        WardBoundary,
-    )
+    from app.models import AQIData, ConstructionSite, Hospital, Industry, User, WardBoundary
     from app.services.data_ingestion import SyntheticDataGenerator
 
     async with AsyncSessionLocal() as db:
@@ -79,6 +71,15 @@ async def seed_data_if_empty() -> None:
 
         logger.info("Database is empty, seeding synthetic data...")
         generator = SyntheticDataGenerator()
+
+        # Seed demo users so login always works after a DB wipe
+        demo_users = [
+            User(email="citizen@demo.com",    full_name="Demo Citizen",    hashed_password=get_password_hash("demo123"), role="citizen",    city="Ahmedabad", is_active=True),
+            User(email="government@demo.com", full_name="Demo Government", hashed_password=get_password_hash("demo123"), role="government", city="Ahmedabad", is_active=True),
+        ]
+        for u in demo_users:
+            db.add(u)
+        logger.info("Inserted %d demo users", len(demo_users))
 
         # Generate and insert AQI data (past 30 days)
         aqi_records = generator.generate_aqi_data(days_back=30)

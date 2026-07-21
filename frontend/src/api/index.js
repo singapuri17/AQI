@@ -71,14 +71,15 @@ export const healthAPI = {
 }
 
 export const hotspotsAPI = {
-  getHotspots: () => axios.get('/hotspots'),
-  getIndustries: () => axios.get('/hotspots/industries'),
-  getConstructionSites: () => axios.get('/hotspots/construction'),
-  getPriorityRanking: () => axios.get('/hotspots/priority-ranking'),
+  getHotspots: (city) => axios.get(city ? `/hotspots/?city=${city}` : '/hotspots/'),
+  getIndustries: (city) => axios.get(city ? `/hotspots/industries?city=${city}` : '/hotspots/industries'),
+  getConstructionSites: (city) => axios.get(city ? `/hotspots/construction?city=${city}` : '/hotspots/construction'),
+  getPriorityRanking: (city) => axios.get(city ? `/hotspots/priority-ranking?city=${city}` : '/hotspots/priority-ranking'),
 }
 
 export const governmentAPI = {
-  getActions: () => axios.get('/government/actions'),
+  getActions: (city) => axios.get(city ? `/government/actions?city=${city}` : '/government/actions'),
+  updateActionStatus: (actionId, newStatus) => axios.patch(`/government/actions/${actionId}/status`, { status: newStatus }),
   // Map frontend-friendly fields to backend schema
   createAction: (data) => {
     const typeMap = {
@@ -96,7 +97,8 @@ export const governmentAPI = {
       priority: (data.priority || 'medium').toLowerCase(),
     })
   },
-  getRecommendations: () => axios.get('/government/recommendations'),
+  getRecommendations: (city) => axios.get(city ? `/government/recommendations?city=${city}` : '/government/recommendations'),
+  getWardRecommendations: (wardId) => axios.get(`/government/recommendations/ward/${wardId}`),
   // POST to /government/reports/generate
   generateReport: (wardId) => axios.post('/government/reports/generate', {
     ward_id: String(wardId),
@@ -105,5 +107,5 @@ export const governmentAPI = {
   downloadReport: (reportId) => axios.get(`/government/reports/${reportId}/download`, {
     responseType: 'blob',
   }),
-  getReports: () => axios.get('/government/reports'),
+  getReports: (city) => axios.get(city ? `/government/reports?city=${encodeURIComponent(city)}` : '/government/reports'),
 }

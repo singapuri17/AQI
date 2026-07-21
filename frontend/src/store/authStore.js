@@ -10,6 +10,11 @@ export const useAuthStore = create(
       
       login: (user, token) => {
         set({ user, token, isAuthenticated: true })
+        // Sync city store to user's registered city
+        try {
+          const { useCityStore } = require('./cityStore')
+          useCityStore.getState().syncToUser(user)
+        } catch (_) {}
       },
       
       logout: () => {
