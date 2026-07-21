@@ -159,9 +159,9 @@ export default function IndustriesPage() {
               className="rounded-xl z-0"
             >
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; CARTO'
-              />
+  attribution='&copy; OpenStreetMap contributors'
+  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+/>
               {filtered.map(ind => {
                 if (!ind.lat || !ind.lng) return null
                 const color  = typeColor(ind.type)

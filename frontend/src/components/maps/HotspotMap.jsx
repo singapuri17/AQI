@@ -1,10 +1,20 @@
 import 'leaflet/dist/leaflet.css'
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { useEffect } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
 
 const CLUSTER_COLORS = [
   '#ef4444', '#f97316', '#a855f7', '#3b82f6',
   '#10b981', '#fbbf24', '#ec4899', '#14b8a6',
 ]
+
+// Recenter the map whenever the `center` prop changes
+function Recenter({ center }) {
+  const map = useMap()
+  useEffect(() => {
+    if (center) map.setView(center, map.getZoom())
+  }, [center, map])
+  return null
+}
 
 export default function HotspotMap({
   hotspots   = [],
@@ -19,10 +29,13 @@ export default function HotspotMap({
       style={{ height, width: '100%' }}
       className="rounded-xl z-0"
     >
+      {/* Recenter when `center` prop changes */}
+      <Recenter center={center} />
       <TileLayer
   attribution='&copy; OpenStreetMap contributors'
   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 />
+
 
       {hotspots.map((hs, i) => {
         const lat = hs.lat ?? hs.latitude ?? hs.center_latitude

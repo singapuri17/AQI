@@ -2,10 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import { useCityStore } from './store/cityStore'
-import LandingPage from './pages/LandingPage'
-import LoginPage from './pages/LoginPage'
+
 import RegisterPage from './pages/RegisterPage'
-import CitizenDashboard from './pages/CitizenDashboard'
+
 
 import LandingPage        from './pages/LandingPage'
 import LoginPage          from './pages/LoginPage'

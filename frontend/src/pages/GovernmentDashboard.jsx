@@ -43,6 +43,7 @@ function GovernmentOverview() {
   const [loading, setLoading]           = useState(true)
   const { user } = useAuthStore()
   const { selectedCity } = useCityStore()
+  const displayCity = user?.city || selectedCity
 
   useEffect(() => {
     const city = user?.city || selectedCity || null
@@ -123,9 +124,9 @@ function GovernmentOverview() {
         <h1 className="text-2xl font-bold text-white">Government Control Center</h1>
         <p className="text-gray-400 text-sm mt-1">
           Welcome, {user?.full_name || user?.name} · {format(new Date(), 'EEEE, MMMM d yyyy')}
-          {user?.city && (
+          {displayCity && (
             <span className="ml-2 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium">
-              📍 {user.city}
+              📍 {displayCity}
             </span>
           )}
         </p>
