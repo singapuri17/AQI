@@ -202,6 +202,18 @@ async def get_ward_recommendations(
         for c in construction
     ) or "No active construction sites"
 
+    # Detailed dicts for data-driven fallback
+    industry_details = [
+        {"name": i.name, "type": i.industry_type,
+         "contribution": i.pollution_contribution or 0,
+         "category": i.emission_category or "medium"}
+        for i in industries
+    ]
+    construction_details = [
+        {"name": c.name, "dust": c.dust_emission_level or "medium"}
+        for c in construction
+    ]
+
     gemini = GeminiService()
     analysis, recommendations = await gemini.generate_ward_analysis(
         ward_name=ward_name,
@@ -212,6 +224,8 @@ async def get_ward_recommendations(
         no2=no2,
         industries=industry_text,
         construction_sites=construction_text,
+        industry_details=industry_details,
+        construction_details=construction_details,
     )
 
     return {
