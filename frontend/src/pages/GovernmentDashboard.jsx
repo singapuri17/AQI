@@ -43,15 +43,15 @@ function GovernmentOverview() {
   const { user } = useAuthStore()
 
   useEffect(() => {
+    const city = user?.city || null
     const loadAll = async () => {
       setLoading(true)
       try {
-        // Fetch everything in parallel
         const [aqiRes, hotspotsRes, actionsRes, priorityRes] = await Promise.allSettled([
-          aqiAPI.getCurrentAQI(),
-          hotspotsAPI.getHotspots(),
-          governmentAPI.getActions(),
-          hotspotsAPI.getPriorityRanking(),
+          aqiAPI.getCurrentAQI(city),
+          hotspotsAPI.getHotspots(city),
+          governmentAPI.getActions(city),
+          hotspotsAPI.getPriorityRanking(city),
         ])
 
         // ── AQI wards ─────────────────────────────────────────────────
@@ -97,7 +97,7 @@ function GovernmentOverview() {
       }
     }
     loadAll()
-  }, [])   // ← only runs once on mount
+  }, [user?.city])   // re-fetch when city changes
 
   const quickLinks = [
     { to: '/government/hotspots',  icon: ExclamationTriangleIcon, label: 'View Hotspots',   color: 'orange' },
@@ -121,6 +121,11 @@ function GovernmentOverview() {
         <h1 className="text-2xl font-bold text-white">Government Control Center</h1>
         <p className="text-gray-400 text-sm mt-1">
           Welcome, {user?.full_name || user?.name} · {format(new Date(), 'EEEE, MMMM d yyyy')}
+          {user?.city && (
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-medium">
+              📍 {user.city}
+            </span>
+          )}
         </p>
       </div>
 

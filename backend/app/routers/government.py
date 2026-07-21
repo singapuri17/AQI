@@ -29,33 +29,28 @@ router = APIRouter(prefix="/government", tags=["Government"])
 )
 async def get_actions(
     ward_id: Optional[str] = None,
+    city: Optional[str] = None,
     status_filter: Optional[str] = None,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    """Return government actions, optionally filtered by ward or status.
-
-    Args:
-        ward_id: Optional ward filter.
-        status_filter: Optional status filter (pending/in_progress/completed/cancelled).
-        limit: Maximum records to return.
-        db: Async database session.
-        _: Any authenticated user.
-
-    Returns:
-        List of GovernmentAction records ordered newest-first.
-    """
+    from app.models import WardBoundary
     query = select(GovernmentAction).order_by(desc(GovernmentAction.created_at))
     if ward_id:
         query = query.where(GovernmentAction.ward_id == ward_id)
+    elif city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(GovernmentAction.ward_id.in_(city_ward_ids))
     if status_filter:
         query = query.where(GovernmentAction.status == status_filter)
     query = query.limit(limit)
-
     result = await db.execute(query)
-    actions = result.scalars().all()
-    return [GovernmentActionResponse.model_validate(a) for a in actions]
+    return [GovernmentActionResponse.model_validate(a) for a in result.scalars().all()]
 
 
 @router.post(

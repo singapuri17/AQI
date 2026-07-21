@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CloudIcon, EyeIcon, EyeSlashIcon, UserIcon, BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import { authAPI } from '../api'
+import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
+
+const CITIES = ['Ahmedabad', 'Surat', 'Vadodara']
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -17,6 +20,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const { login } = useAuthStore()
 
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }))
 
@@ -34,15 +38,17 @@ export default function RegisterPage() {
     if (err) { toast.error(err); return }
     setLoading(true)
     try {
-      await authAPI.register({
+      const res = await authAPI.register({
         name: form.name,
         email: form.email,
         password: form.password,
         role: form.role,
         city: form.city,
       })
-      toast.success('Account created! Please sign in.')
-      navigate('/login')
+      const { access_token, user } = res.data
+      login(user, access_token)
+      toast.success(`Welcome, ${user.full_name}! Redirecting…`)
+      navigate(user.role === 'government' ? '/government' : '/citizen', { replace: true })
     } catch (err) {
       const msg = err.response?.data?.detail || 'Registration failed. Try a different email.'
       toast.error(Array.isArray(msg) ? msg[0]?.msg || 'Validation error' : msg)
@@ -122,10 +128,16 @@ export default function RegisterPage() {
 
             <div>
               <label className="label-text">City</label>
-              <input
-                type="text" name="city" value={form.city} onChange={handleChange}
-                placeholder="Ahmedabad" className="input-field"
-              />
+              <select name="city" value={form.city} onChange={handleChange} className="input-field">
+                {CITIES.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {form.role === 'government'
+                  ? 'You will manage air quality data for this city'
+                  : 'Your city for localised AQI and health alerts'}
+              </p>
             </div>
 
             <div>

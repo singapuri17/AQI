@@ -4,6 +4,7 @@ import { hotspotsAPI } from '../../api'
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { BuildingStorefrontIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { useAuthStore } from '../../store/authStore'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
@@ -51,6 +52,7 @@ const EMISSION_BADGE = {
 export default function IndustriesPage() {
   const [industries, setIndustries]   = useState([])
   const [loading, setLoading]         = useState(true)
+  const { user } = useAuthStore()
   const [selectedType, setSelectedType] = useState('All')
   const [error, setError]             = useState(null)
 
@@ -59,7 +61,7 @@ export default function IndustriesPage() {
       setLoading(true)
       setError(null)
       try {
-        const res  = await hotspotsAPI.getIndustries()
+        const res  = await hotspotsAPI.getIndustries(user?.city || null)
         const raw  = Array.isArray(res.data) ? res.data : []
         setIndustries(raw.map(normalise))
       } catch (e) {
@@ -71,7 +73,7 @@ export default function IndustriesPage() {
       }
     }
     load()
-  }, [])
+  }, [user?.city])
 
   // Unique types from data
   const allTypes = ['All', ...Array.from(new Set(industries.map(i => i.type))).sort()]

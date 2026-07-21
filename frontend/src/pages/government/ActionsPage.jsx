@@ -1,18 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { governmentAPI } from '../../api'
+import { governmentAPI, aqiAPI } from '../../api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { BoltIcon, PlusIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { useAuthStore } from '../../store/authStore'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
-const WARDS = [
-  'Naroda','Vatva','Nikol','Gota','Bopal','Satellite','Navrangpura',
-  'Maninagar','Vastral','Chandkheda','Ghatlodia','Thaltej',
-  'Bapunagar','Odhav','Isanpur','Naranpura','Vejalpur','Shahibaug','Paldi','Ramol',
-]
-
-// What the user sees → what the backend expects for action_type
 const ACTION_TYPES = [
   { label: 'Traffic Restriction', value: 'regulation'      },
   { label: 'Water Sprinkling',    value: 'infrastructure'  },
@@ -69,21 +63,35 @@ export default function ActionsPage() {
   const [loading, setLoading]               = useState(true)
   const [showForm, setShowForm]             = useState(false)
   const [submitting, setSubmitting]         = useState(false)
+  const [cityWards, setCityWards]           = useState([])
+  const { user } = useAuthStore()
 
   const [form, setForm] = useState({
-    ward:        location.state?.wardPreset || WARDS[0],
+    ward:        location.state?.wardPreset || '',
     action_type: ACTION_TYPES[0].label,
     description: '',
     priority:    'high',
   })
 
-  // Load actions + recommendations
+  // Load wards for the user's city
   useEffect(() => {
+    const city = user?.city || null
+    aqiAPI.getWardList(city).then(res => {
+      const list = Array.isArray(res.data) ? res.data : []
+      setCityWards(list)
+      if (list.length > 0 && !form.ward) {
+        setForm(f => ({ ...f, ward: list[0].ward_id }))
+      }
+    }).catch(() => setCityWards([]))
+  }, [user?.city]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Load actions filtered by city
+  useEffect(() => {
+    const city = user?.city || null
     const load = async () => {
       setLoading(true)
       try {
         const [actRes, recRes] = await Promise.all([
-          governmentAPI.getActions().catch(() => null),
+          governmentAPI.getActions(city).catch(() => null),
           governmentAPI.getRecommendations().catch(() => null),
         ])
         setActions(
@@ -101,24 +109,24 @@ export default function ActionsPage() {
       }
     }
     load()
-  }, [])
+  }, [user?.city])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.description.trim()) { toast.error('Please add a description'); return }
     setSubmitting(true)
+    const defaultWard = cityWards[0]?.ward_id || ''
     try {
       const res = await governmentAPI.createAction(form)
       setActions(prev => [normalise(res.data), ...prev])
       toast.success('Action created successfully')
-      setForm({ ward: WARDS[0], action_type: ACTION_TYPES[0].label, description: '', priority: 'high' })
+      setForm({ ward: defaultWard, action_type: ACTION_TYPES[0].label, description: '', priority: 'high' })
       setShowForm(false)
     } catch {
-      // Optimistic local add
       const mock = { id: Date.now(), ...normalise({ ...form, status: 'pending', created_at: new Date().toISOString() }) }
       setActions(prev => [mock, ...prev])
       toast.success('Action saved (offline mode)')
-      setForm({ ward: WARDS[0], action_type: ACTION_TYPES[0].label, description: '', priority: 'high' })
+      setForm({ ward: defaultWard, action_type: ACTION_TYPES[0].label, description: '', priority: 'high' })
       setShowForm(false)
     } finally {
       setSubmitting(false)
@@ -143,6 +151,7 @@ export default function ActionsPage() {
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">
             Manage interventions and AI-powered recommendations
+            {user?.city && <span className="ml-2 text-purple-300 font-medium">· {user.city}</span>}
           </p>
         </div>
         <button
@@ -165,7 +174,9 @@ export default function ActionsPage() {
               <label className="label-text">Ward</label>
               <select className="input-field" value={form.ward}
                 onChange={e => setForm(f => ({ ...f, ward: e.target.value }))}>
-                {WARDS.map(w => <option key={w}>{w}</option>)}
+                {cityWards.map(w => (
+                  <option key={w.ward_id} value={w.ward_id}>{w.ward_name}</option>
+                ))}
               </select>
             </div>
             <div>

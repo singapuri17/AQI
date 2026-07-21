@@ -17,38 +17,34 @@ router = APIRouter(prefix="/hotspots", tags=["Hotspots"])
     summary="Detect current pollution hotspots using DBSCAN clustering",
 )
 async def get_hotspots(
-    hours_back: int = Query(default=720, ge=1, le=8760),  # default 30 days
+    hours_back: int = Query(default=720, ge=1, le=8760),
+    city: str | None = Query(default=None, description="Filter by city name"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cluster recent AQI readings with DBSCAN to identify pollution hotspots.
-
-    Args:
-        hours_back: How many hours of data to include (1–168).
-        db: Async database session.
-
-    Returns:
-        List of hotspot clusters with severity and geographic centre.
-    """
     from datetime import datetime, timedelta, timezone
-
+    from app.models import WardBoundary
     from app.services.ml_service import HotspotDetector
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
-    result = await db.execute(
-        select(AQIData).where(
-            AQIData.timestamp >= cutoff,
-            AQIData.latitude.isnot(None),
-            AQIData.longitude.isnot(None),
-        )
+    query = select(AQIData).where(
+        AQIData.timestamp >= cutoff,
+        AQIData.latitude.isnot(None),
+        AQIData.longitude.isnot(None),
     )
-    records = result.scalars().all()
+    if city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(AQIData.ward_id.in_(city_ward_ids))
 
+    result = await db.execute(query)
+    records = result.scalars().all()
     if not records:
         return []
-
     detector = HotspotDetector()
-    hotspots = detector.detect_clusters(records)
-    return hotspots
+    return detector.detect_clusters(records)
 
 
 @router.get(
@@ -58,29 +54,24 @@ async def get_hotspots(
 )
 async def get_industries(
     ward_id: str | None = Query(default=None),
+    city: str | None = Query(default=None, description="Filter by city name"),
     limit: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return industries, optionally filtered by ward.
-
-    Args:
-        ward_id: Optional ward filter.
-        limit: Maximum records to return.
-        db: Async database session.
-
-    Returns:
-        List of industries sorted by pollution_contribution descending.
-    """
+    from app.models import WardBoundary
     query = select(Industry)
     if ward_id:
         query = query.where(Industry.ward_id == ward_id)
-    query = query.order_by(
-        Industry.pollution_contribution.desc().nullslast()
-    ).limit(limit)
-
+    elif city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(Industry.ward_id.in_(city_ward_ids))
+    query = query.order_by(Industry.pollution_contribution.desc().nullslast()).limit(limit)
     result = await db.execute(query)
-    industries = result.scalars().all()
-    return [IndustryResponse.model_validate(i) for i in industries]
+    return [IndustryResponse.model_validate(i) for i in result.scalars().all()]
 
 
 @router.get(
@@ -90,28 +81,25 @@ async def get_industries(
 )
 async def get_construction_sites(
     ward_id: str | None = Query(default=None),
+    city: str | None = Query(default=None, description="Filter by city name"),
     active_only: bool = Query(default=True),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return construction sites, optionally filtered by ward and active status.
-
-    Args:
-        ward_id: Optional ward filter.
-        active_only: If True, only return currently active sites.
-        db: Async database session.
-
-    Returns:
-        List of construction site records.
-    """
+    from app.models import WardBoundary
     query = select(ConstructionSite)
     if ward_id:
         query = query.where(ConstructionSite.ward_id == ward_id)
+    elif city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(ConstructionSite.ward_id.in_(city_ward_ids))
     if active_only:
         query = query.where(ConstructionSite.is_active == True)
-
     result = await db.execute(query)
-    sites = result.scalars().all()
-    return [ConstructionSiteResponse.model_validate(s) for s in sites]
+    return [ConstructionSiteResponse.model_validate(s) for s in result.scalars().all()]
 
 
 @router.get(
@@ -120,21 +108,18 @@ async def get_construction_sites(
 )
 async def get_priority_ranking(
     limit: int = Query(default=20, ge=1, le=50),
+    city: str | None = Query(default=None, description="Filter by city name"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rank wards by combined AQI severity and source density.
+    from app.models import WardBoundary
 
-    Uses the latest AQI per ward plus industry/construction site counts to
-    compute a priority score for government intervention.
-
-    Args:
-        limit: Number of wards to include in the ranking.
-        db: Async database session.
-
-    Returns:
-        List of ward priority objects sorted highest-priority-first.
-    """
-    from sqlalchemy import and_
+    # Resolve city → ward_id list
+    city_ward_ids: set[str] | None = None
+    if city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = {r[0] for r in wb_result.all()}
 
     # Latest AQI per ward
     subq = (
@@ -142,9 +127,10 @@ async def get_priority_ranking(
         .group_by(AQIData.ward_id)
         .subquery()
     )
-    result = await db.execute(
-        select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
-    )
+    aqi_query = select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
+    if city_ward_ids:
+        aqi_query = aqi_query.where(AQIData.ward_id.in_(city_ward_ids))
+    result = await db.execute(aqi_query)
     latest_aqi_records = result.scalars().all()
 
     # Industry count per ward

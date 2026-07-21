@@ -42,28 +42,28 @@ def _enrich(record: AQIData) -> AQIDataResponse:
     response_model=list[AQIDataResponse],
     summary="Get the latest AQI reading for every ward",
 )
-async def get_current_aqi(db: AsyncSession = Depends(get_db)):
-    """Return the most-recent AQI snapshot for each ward.
-
-    Args:
-        db: Async database session.
-
-    Returns:
-        List of the latest AQI records, one per ward.
-    """
-    # Subquery: max id per ward (proxy for latest row)
+async def get_current_aqi(
+    city: Optional[str] = Query(default=None, description="Filter by city name"),
+    db: AsyncSession = Depends(get_db),
+):
     from sqlalchemy import func
+    from app.models import WardBoundary
 
     subq = (
         select(func.max(AQIData.id).label("max_id"))
         .group_by(AQIData.ward_id)
         .subquery()
     )
-    result = await db.execute(
-        select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
-    )
-    records = result.scalars().all()
-    return [_enrich(r) for r in records]
+    query = select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
+    if city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ward_ids = [r[0] for r in wb_result.all()]
+        if city_ward_ids:
+            query = query.where(AQIData.ward_id.in_(city_ward_ids))
+    result = await db.execute(query)
+    return [_enrich(r) for r in result.scalars().all()]
 
 
 @router.get(
