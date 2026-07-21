@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import WardRankingChart from '../components/charts/WardRankingChart'
 import { aqiAPI, hotspotsAPI, governmentAPI } from '../api'
 import { useAuthStore } from '../store/authStore'
+import { useCityStore } from '../store/cityStore'
 import {
   ExclamationTriangleIcon, ShieldCheckIcon, BoltIcon, DocumentTextIcon,
   BuildingStorefrontIcon, StarIcon
@@ -41,9 +42,10 @@ function GovernmentOverview() {
   const [stats, setStats]               = useState({ hotspots: 0, highRisk: 0, actions: 0, reports: 0 })
   const [loading, setLoading]           = useState(true)
   const { user } = useAuthStore()
+  const { selectedCity } = useCityStore()
 
   useEffect(() => {
-    const city = user?.city || null
+    const city = user?.city || selectedCity || null
     const loadAll = async () => {
       setLoading(true)
       try {
@@ -97,7 +99,7 @@ function GovernmentOverview() {
       }
     }
     loadAll()
-  }, [user?.city])   // re-fetch when city changes
+  }, [user?.city, selectedCity])   // re-fetch when city changes
 
   const quickLinks = [
     { to: '/government/hotspots',  icon: ExclamationTriangleIcon, label: 'View Hotspots',   color: 'orange' },

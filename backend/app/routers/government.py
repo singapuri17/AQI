@@ -36,6 +36,7 @@ async def get_actions(
     _=Depends(get_current_user),
 ):
     from app.models import WardBoundary
+    city = city.strip().title() if city else None
     query = select(GovernmentAction).order_by(desc(GovernmentAction.created_at))
     if ward_id:
         query = query.where(GovernmentAction.ward_id == ward_id)

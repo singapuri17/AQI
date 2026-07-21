@@ -8,6 +8,7 @@ import AQITrendChart from '../../components/charts/AQITrendChart'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { format, subDays } from 'date-fns'
 import { useAuthStore } from '../../store/authStore'
+import { useCityStore } from '../../store/cityStore'
 
 // Normalise a backend hotspot cluster record
 // Backend shape: { cluster_id, ward_ids, ward_names, center_latitude, center_longitude,
@@ -60,9 +61,10 @@ export default function HotspotsPage() {
   const [loading, setLoading]           = useState(true)
   const [selectedHotspot, setSelected]  = useState(null)
   const { user } = useAuthStore()
+  const { selectedCity } = useCityStore()
 
   useEffect(() => {
-    const city = user?.city || null
+    const city = user?.city || selectedCity || null
     const load = async () => {
       setLoading(true)
       try {
@@ -78,7 +80,7 @@ export default function HotspotsPage() {
       }
     }
     load()
-  }, [user?.city])
+  }, [user?.city, selectedCity])
 
   return (
     <div className="space-y-4">

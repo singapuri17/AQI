@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useEffect } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import { useCityStore } from './store/cityStore'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -23,6 +24,13 @@ function ProtectedRoute({ children, requiredRole }) {
 }
 
 export default function App() {
+  const { user } = useAuthStore()
+  const { syncToUser } = useCityStore()
+
+  // On app load, sync city to user's registered city
+  useEffect(() => {
+    if (user) syncToUser(user)
+  }, [user, syncToUser])
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />

@@ -15,6 +15,12 @@ export const useCityStore = create(
     (set) => ({
       selectedCity: 'Ahmedabad',
       setCity: (city) => set({ selectedCity: city }),
+      // Sync to user's registered city on login
+      syncToUser: (user) => {
+        if (user?.city && CITIES.includes(user.city)) {
+          set({ selectedCity: user.city })
+        }
+      },
     }),
     { name: 'aqi-city-store' }
   )

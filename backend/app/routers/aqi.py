@@ -49,6 +49,7 @@ async def get_current_aqi(
     from sqlalchemy import func
     from app.models import WardBoundary
 
+    city = city.strip().title() if city else None
     subq = (
         select(func.max(AQIData.id).label("max_id"))
         .group_by(AQIData.ward_id)
@@ -166,6 +167,7 @@ async def get_wards(
 
     query = select(WardBoundary.ward_id, WardBoundary.ward_name, WardBoundary.city)
     if city:
+        city = city.strip().title()
         query = query.where(WardBoundary.city == city)
     query = query.order_by(WardBoundary.city, WardBoundary.ward_name)
     result = await db.execute(query)

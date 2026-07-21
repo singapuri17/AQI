@@ -4,6 +4,7 @@ import { governmentAPI, aqiAPI } from '../../api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { BoltIcon, PlusIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useAuthStore } from '../../store/authStore'
+import { useCityStore } from '../../store/cityStore'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -65,6 +66,7 @@ export default function ActionsPage() {
   const [submitting, setSubmitting]         = useState(false)
   const [cityWards, setCityWards]           = useState([])
   const { user } = useAuthStore()
+  const { selectedCity } = useCityStore()
 
   const [form, setForm] = useState({
     ward:        location.state?.wardPreset || '',
@@ -75,7 +77,7 @@ export default function ActionsPage() {
 
   // Load wards for the user's city
   useEffect(() => {
-    const city = user?.city || null
+    const city = user?.city || selectedCity || null
     aqiAPI.getWardList(city).then(res => {
       const list = Array.isArray(res.data) ? res.data : []
       setCityWards(list)
@@ -83,10 +85,11 @@ export default function ActionsPage() {
         setForm(f => ({ ...f, ward: list[0].ward_id }))
       }
     }).catch(() => setCityWards([]))
-  }, [user?.city]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.city, selectedCity]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load actions filtered by city
   useEffect(() => {
-    const city = user?.city || null
+    const city = user?.city || selectedCity || null
     const load = async () => {
       setLoading(true)
       try {
@@ -109,7 +112,7 @@ export default function ActionsPage() {
       }
     }
     load()
-  }, [user?.city])
+  }, [user?.city, selectedCity])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

@@ -11,6 +11,11 @@ from app.schemas import ConstructionSiteResponse, HotspotResponse, IndustryRespo
 router = APIRouter(prefix="/hotspots", tags=["Hotspots"])
 
 
+def _norm_city(city: str | None) -> str | None:
+    """Normalise city name to title-case so 'surat' → 'Surat'."""
+    return city.strip().title() if city else None
+
+
 @router.get(
     "/",
     response_model=list[HotspotResponse],
@@ -25,6 +30,7 @@ async def get_hotspots(
     from app.models import WardBoundary
     from app.services.ml_service import HotspotDetector
 
+    city = _norm_city(city)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
     query = select(AQIData).where(
         AQIData.timestamp >= cutoff,
@@ -59,6 +65,7 @@ async def get_industries(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import WardBoundary
+    city = _norm_city(city)
     query = select(Industry)
     if ward_id:
         query = query.where(Industry.ward_id == ward_id)
@@ -86,6 +93,7 @@ async def get_construction_sites(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import WardBoundary
+    city = _norm_city(city)
     query = select(ConstructionSite)
     if ward_id:
         query = query.where(ConstructionSite.ward_id == ward_id)
@@ -113,6 +121,7 @@ async def get_priority_ranking(
 ):
     from app.models import WardBoundary
 
+    city = _norm_city(city)
     # Resolve city → ward_id list
     city_ward_ids: set[str] | None = None
     if city:
