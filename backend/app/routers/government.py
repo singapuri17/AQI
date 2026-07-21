@@ -91,55 +91,140 @@ async def create_action(
 
 @router.get(
     "/recommendations",
-    summary="Get AI-generated government recommendations",
+    summary="Get AI-generated government recommendations for the city",
 )
 async def get_recommendations(
+    city: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_government_user),
 ):
-    """Generate actionable government recommendations using Gemini AI.
-
-    Pulls current AQI hotspots and passes them to the Gemini service to
-    produce structured policy recommendations.
-
-    Args:
-        db: Async database session.
-        _: Authenticated government user.
-
-    Returns:
-        Dict with recommendations list and summary narrative.
-    """
     from sqlalchemy import func
-
     from app.services.gemini_service import GeminiService
+    from app.models import WardBoundary
 
-    # Fetch latest AQI per ward
+    city = city.strip().title() if city else None
+
+    # Fetch latest AQI per ward (filtered by city)
     subq = (
         select(func.max(AQIData.id).label("max_id"))
         .group_by(AQIData.ward_id)
         .subquery()
     )
-    result = await db.execute(
-        select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
-    )
+    aqi_query = select(AQIData).where(AQIData.id.in_(select(subq.c.max_id)))
+    if city:
+        wb_result = await db.execute(
+            select(WardBoundary.ward_id).where(WardBoundary.city == city)
+        )
+        city_ids = [r[0] for r in wb_result.all()]
+        if city_ids:
+            aqi_query = aqi_query.where(AQIData.ward_id.in_(city_ids))
+
+    result = await db.execute(aqi_query)
     aqi_records = result.scalars().all()
 
     aqi_summary = [
-        {
-            "ward_id": r.ward_id,
-            "ward_name": r.ward_name,
-            "aqi": r.aqi_value,
-            "pm25": r.pm25,
-            "pm10": r.pm10,
-        }
+        {"ward_id": r.ward_id, "ward_name": r.ward_name,
+         "aqi": r.aqi_value, "pm25": r.pm25, "pm10": r.pm10}
         for r in aqi_records
     ]
 
     gemini = GeminiService()
-    recommendations = await gemini.generate_government_recommendations(
-        aqi_data=aqi_summary
-    )
+    recommendations = await gemini.generate_government_recommendations(aqi_data=aqi_summary)
     return {"recommendations": recommendations, "ward_count": len(aqi_records)}
+
+
+@router.get(
+    "/recommendations/ward/{ward_id}",
+    summary="Get deep AI analysis and action recommendations for a specific ward",
+)
+async def get_ward_recommendations(
+    ward_id: str,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_government_user),
+):
+    """Generate detailed ward-specific recommendations with AQI trend,
+    industry sources, construction sites, and specific action steps."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+    from app.models import ConstructionSite, Industry
+    from app.services.gemini_service import GeminiService
+
+    # Latest AQI for this ward
+    result = await db.execute(
+        select(AQIData)
+        .where(AQIData.ward_id == ward_id)
+        .order_by(desc(AQIData.timestamp))
+        .limit(1)
+    )
+    latest = result.scalar_one_or_none()
+
+    # 7-day average
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    avg_result = await db.execute(
+        select(func.avg(AQIData.aqi_value))
+        .where(AQIData.ward_id == ward_id, AQIData.timestamp >= cutoff)
+    )
+    avg_aqi = avg_result.scalar() or 0
+
+    # Industries in this ward
+    ind_result = await db.execute(
+        select(Industry)
+        .where(Industry.ward_id == ward_id)
+        .order_by(Industry.pollution_contribution.desc().nullslast())
+        .limit(5)
+    )
+    industries = ind_result.scalars().all()
+
+    # Active construction sites
+    con_result = await db.execute(
+        select(ConstructionSite)
+        .where(ConstructionSite.ward_id == ward_id, ConstructionSite.is_active == True)
+    )
+    construction = con_result.scalars().all()
+
+    if not latest:
+        return {"ward_id": ward_id, "recommendations": [], "analysis": "No data available for this ward."}
+
+    # Build context for Gemini
+    ward_name = latest.ward_name
+    current_aqi = latest.aqi_value
+    pm25 = latest.pm25 or 0
+    pm10 = latest.pm10 or 0
+    no2 = latest.no2 or 0
+
+    industry_text = ", ".join(
+        f"{i.name} ({i.industry_type}, {i.pollution_contribution or 0:.0f}% contribution)"
+        for i in industries
+    ) or "No industries recorded"
+
+    construction_text = ", ".join(
+        f"{c.name} (dust: {c.dust_emission_level})"
+        for c in construction
+    ) or "No active construction sites"
+
+    gemini = GeminiService()
+    analysis, recommendations = await gemini.generate_ward_analysis(
+        ward_name=ward_name,
+        current_aqi=current_aqi,
+        avg_aqi_7d=round(avg_aqi, 1),
+        pm25=pm25,
+        pm10=pm10,
+        no2=no2,
+        industries=industry_text,
+        construction_sites=construction_text,
+    )
+
+    return {
+        "ward_id": ward_id,
+        "ward_name": ward_name,
+        "current_aqi": current_aqi,
+        "avg_aqi_7d": round(avg_aqi, 1),
+        "pm25": pm25, "pm10": pm10, "no2": no2,
+        "industry_count": len(industries),
+        "construction_count": len(construction),
+        "analysis": analysis,
+        "recommendations": recommendations,
+    }
 
 
 @router.get(

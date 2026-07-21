@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate, useEffect } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import { useCityStore } from './store/cityStore'
 import LandingPage from './pages/LandingPage'

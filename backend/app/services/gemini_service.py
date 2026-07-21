@@ -220,7 +220,104 @@ class GeminiService:
         )
         return await self._generate(prompt, fallback)
 
-    async def translate_advice(self, text: str, target_language: str) -> str:
+    async def generate_ward_analysis(
+        self,
+        ward_name: str,
+        current_aqi: float,
+        avg_aqi_7d: float,
+        pm25: float,
+        pm10: float,
+        no2: float,
+        industries: str,
+        construction_sites: str,
+    ) -> tuple[str, list[dict]]:
+        """Generate deep ward-specific analysis and recommended actions.
+
+        Returns:
+            Tuple of (analysis_text, list_of_action_dicts)
+        """
+        def _aqi_cat(v):
+            if v <= 50: return "Good"
+            if v <= 100: return "Satisfactory"
+            if v <= 200: return "Moderate"
+            if v <= 300: return "Poor"
+            if v <= 400: return "Very Poor"
+            return "Severe"
+
+        analysis_prompt = (
+            f"You are an expert environmental analyst advising the government of {ward_name}.\n"
+            f"Current AQI: {current_aqi:.0f} ({_aqi_cat(current_aqi)})\n"
+            f"7-day average AQI: {avg_aqi_7d:.0f}\n"
+            f"PM2.5: {pm25:.1f} μg/m³, PM10: {pm10:.1f} μg/m³, NO₂: {no2:.1f} μg/m³\n"
+            f"Major pollution sources — Industries: {industries}\n"
+            f"Active construction: {construction_sites}\n\n"
+            "Write a concise 3-sentence analysis covering: "
+            "1) the current pollution situation, "
+            "2) the primary contributing sources, "
+            "3) the health risk to residents. "
+            "Be specific to this ward. Use plain English."
+        )
+
+        actions_prompt = (
+            f"Based on the air quality data for {ward_name} "
+            f"(AQI {current_aqi:.0f}, PM2.5 {pm25:.1f}, industries: {industries}, "
+            f"construction: {construction_sites}), "
+            "suggest exactly 4 specific government actions. "
+            "For each action output EXACTLY this format on one line:\n"
+            "ACTION: <title> | TYPE: <regulation/enforcement/infrastructure/awareness> | "
+            "PRIORITY: <high/medium/low> | IMPACT: <expected outcome in 10 words> | "
+            "TIMELINE: <e.g. 1 week / 2 weeks / 1 month>\n"
+            "Be specific to the ward's actual pollution sources."
+        )
+
+        fallback_analysis = (
+            f"{ward_name} is currently experiencing {_aqi_cat(current_aqi)} air quality "
+            f"with an AQI of {current_aqi:.0f}. Primary pollution contributors include "
+            f"industrial emissions and vehicular traffic. "
+            f"Residents, especially children and the elderly, face elevated respiratory risk."
+        )
+
+        fallback_actions = [
+            {"title": "Issue Public Health Advisory", "action_type": "awareness",
+             "priority": "high", "impact": "Reduce public exposure to harmful pollutants",
+             "timeline": "Immediate"},
+            {"title": "Industrial Emission Inspection", "action_type": "enforcement",
+             "priority": "high", "impact": "Reduce industrial PM2.5 by 20%",
+             "timeline": "1 week"},
+            {"title": "Dust Suppression at Construction Sites", "action_type": "regulation",
+             "priority": "medium", "impact": "Reduce PM10 levels near construction zones",
+             "timeline": "2 days"},
+            {"title": "Water Sprinkling on Main Roads", "action_type": "infrastructure",
+             "priority": "medium", "impact": "Lower road dust contribution by 15%",
+             "timeline": "3 days"},
+        ]
+
+        analysis = await self._generate(analysis_prompt, fallback_analysis)
+        raw_actions = await self._generate(actions_prompt, "")
+
+        actions = []
+        if raw_actions:
+            for line in raw_actions.strip().splitlines():
+                line = line.strip()
+                if not line or "ACTION:" not in line:
+                    continue
+                rec: dict = {}
+                for part in line.split("|"):
+                    part = part.strip()
+                    if ":" in part:
+                        k, _, v = part.partition(":")
+                        rec[k.strip().lower()] = v.strip()
+                if rec.get("action"):
+                    actions.append({
+                        "title":       rec.get("action", "Intervention"),
+                        "action_type": rec.get("type", "regulation"),
+                        "priority":    rec.get("priority", "medium"),
+                        "impact":      rec.get("impact", ""),
+                        "timeline":    rec.get("timeline", "TBD"),
+                    })
+
+        return analysis, (actions if actions else fallback_actions)
+
         """Translate advisory text to Hindi or Gujarati.
 
         Args:

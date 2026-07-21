@@ -96,7 +96,8 @@ export const governmentAPI = {
       priority: (data.priority || 'medium').toLowerCase(),
     })
   },
-  getRecommendations: () => axios.get('/government/recommendations'),
+  getRecommendations: (city) => axios.get(city ? `/government/recommendations?city=${city}` : '/government/recommendations'),
+  getWardRecommendations: (wardId) => axios.get(`/government/recommendations/ward/${wardId}`),
   // POST to /government/reports/generate
   generateReport: (wardId) => axios.post('/government/reports/generate', {
     ward_id: String(wardId),
