@@ -109,6 +109,26 @@ async def get_current_government_user(current_user=Depends(get_current_user)):
     return current_user
 
 
+async def get_current_staff_user(current_user=Depends(get_current_user)):
+    """Require a staff-level account (OFFICER or ADMIN)."""
+    if current_user.role not in ("OFFICER", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to government staff",
+        )
+    return current_user
+
+
+async def get_current_government_or_admin_user(current_user=Depends(get_current_user)):
+    """Alias for any staff account; remains compatible with government-specific routes."""
+    if current_user.role not in ("OFFICER", "ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to government staff",
+        )
+    return current_user
+
+
 async def get_current_admin_user(current_user=Depends(get_current_user)):
     """Require ADMIN role. Raises HTTP 403 otherwise."""
     if current_user.role != "ADMIN":

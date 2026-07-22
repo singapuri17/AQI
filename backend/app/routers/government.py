@@ -9,8 +9,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_government_user, get_current_government_or_admin_user, get_current_user
-from app.auth import get_current_government_user, get_current_staff_user, get_current_user
+from app.auth import (
+    get_current_government_user,
+    get_current_government_or_admin_user,
+    get_current_staff_user,
+    get_current_user,
+)
 from app.database import get_db
 from app.models import AQIData, EvidenceReport, GovernmentAction
 from app.schemas import (
@@ -126,8 +130,7 @@ async def update_action_status(
 async def get_recommendations(
     city: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_or_admin_user),
-    _=Depends(get_current_staff_user),
+    _staff: object = Depends(get_current_staff_user),
 ):
     from sqlalchemy import func
     from app.services.gemini_service import GeminiService
@@ -171,8 +174,8 @@ async def get_recommendations(
 async def get_ward_recommendations(
     ward_id: str,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_or_admin_user),
-    _=Depends(get_current_staff_user),
+    _gov_or_admin: object = Depends(get_current_government_or_admin_user),
+    _staff: object = Depends(get_current_staff_user),
 ):
     """Rule-based recommendation engine — generates unique actions per ward
     based on AQI, pollutants, industry data, and construction activity."""

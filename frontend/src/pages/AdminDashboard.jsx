@@ -22,6 +22,7 @@ import {
   ChevronRightIcon,
   UserCircleIcon,
   Squares2X2Icon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import { useAuthStore } from '../store/authStore'
