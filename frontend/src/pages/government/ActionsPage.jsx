@@ -2,11 +2,12 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { governmentAPI, aqiAPI } from '../../api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import PollutionAnalysisPanel, { PollutionAttributionBar, SOURCES } from '../../components/PollutionAnalysisPanel'
 import {
   BoltIcon, PlusIcon, SparklesIcon, XMarkIcon,
   CheckCircleIcon, XCircleIcon, ChevronDownIcon,
   BeakerIcon, BuildingStorefrontIcon, ClockIcon,
-  MagnifyingGlassIcon, StarIcon, FunnelIcon,
+  MagnifyingGlassIcon, StarIcon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '../../store/authStore'
 import { useCityStore } from '../../store/cityStore'
@@ -27,7 +28,6 @@ const PRIORITIES = [
   { label: 'Medium', value: 'medium' },
   { label: 'Low',    value: 'low'    },
 ]
-const FILTER_CHIPS = ['All','Industrial','Traffic','Construction','Waste Burning','Green Cover','Critical AQI']
 const SORT_OPTIONS = ['Highest AQI','Highest Priority','Alphabetical']
 
 function normaliseAction(a) {
@@ -81,18 +81,11 @@ function highlight(text, term) {
 }
 
 function wardMatchesFilter(ward, filter, wardData) {
-  if (filter === 'All') return true
+  const source = SOURCES.find(s => s.id === filter)
+  if (!source || filter === 'All') return true
   const d = wardData[ward.ward_id]
   if (!d) return true
-  const map = {
-    'Industrial':   d.industrial_density === 'high',
-    'Traffic':      d.traffic_density === 'high',
-    'Construction': d.construction_activity === 'high',
-    'Waste Burning':d.waste_burning === 'high',
-    'Green Cover':  d.green_cover === 'low',
-    'Critical AQI': d.aqi > 200,
-  }
-  return map[filter] ?? true
+  return source.matchFn(d)
 }
 
 // ── DensityBadge ──────────────────────────────────────────────────────────
@@ -106,7 +99,7 @@ function DensityBadge({ label, level }) {
 }
 
 // ── WardAnalysisCard ──────────────────────────────────────────────────────
-function WardAnalysisCard({ ward, onAccept, searchTerm }) {
+function WardAnalysisCard({ ward, onAccept, searchTerm, onDataLoaded }) {
   const [data, setData]           = useState(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
@@ -115,10 +108,13 @@ function WardAnalysisCard({ ward, onAccept, searchTerm }) {
   useEffect(() => {
     setLoading(true); setError(null); setData(null)
     governmentAPI.getWardRecommendations(ward.ward_id)
-      .then(r => setData(r.data))
+      .then(r => {
+        setData(r.data)
+        onDataLoaded?.(ward.ward_id, r.data)  // cache in parent
+      })
       .catch(e => setError(e?.response?.data?.detail || 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [ward.ward_id])
+  }, [ward.ward_id]) // eslint-disable-line
 
   if (loading) return (
     <div className="glass-card p-5 space-y-3 animate-pulse">
@@ -169,6 +165,8 @@ function WardAnalysisCard({ ward, onAccept, searchTerm }) {
           <p className="text-xs font-semibold text-blue-300 mb-1">🔍 Primary Cause</p>
           <p className="text-sm text-gray-200 leading-relaxed">{data.primary_cause}</p>
         </div>
+        {/* Pollution attribution bar */}
+        <PollutionAttributionBar wardData={data} />
       </div>
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
@@ -459,8 +457,8 @@ export default function ActionsPage() {
       {activeTab === 'recommendations' && (
         <div className="space-y-4">
           {/* Search + Filter + Sort bar */}
-          <div className="glass-card p-4 space-y-3">
-            {/* Search */}
+          {/* Search */}
+          <div className="glass-card p-4">
             <div className="relative">
               <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
@@ -476,21 +474,8 @@ export default function ActionsPage() {
                 </button>
               )}
             </div>
-
-            {/* Filter chips */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <FunnelIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              {FILTER_CHIPS.map(chip => (
-                <button key={chip} onClick={() => setActiveFilter(chip)}
-                  className={clsx('px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                    activeFilter === chip ? 'bg-purple-600 text-white border-purple-500' : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700')}>
-                  {chip}
-                </button>
-              ))}
-            </div>
-
             {/* Sort */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-3">
               <span className="text-xs text-gray-400 flex-shrink-0">Sort by:</span>
               {SORT_OPTIONS.map(opt => (
                 <button key={opt} onClick={() => setSortBy(opt)}
@@ -501,6 +486,14 @@ export default function ActionsPage() {
               ))}
             </div>
           </div>
+
+          {/* AI Pollution Source Analysis Panel */}
+          <PollutionAnalysisPanel
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            wardData={wardData}
+            cityWards={cityWards}
+          />
 
           {/* Info banner */}
           <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
@@ -563,6 +556,7 @@ export default function ActionsPage() {
                       ward={ward}
                       onAccept={handleAccept}
                       searchTerm={searchTerm}
+                      onDataLoaded={handleWardDataLoaded}
                     />
                   </div>
                 )}
