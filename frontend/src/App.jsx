@@ -19,6 +19,7 @@ import IndustriesPage from './pages/government/IndustriesPage'
 import PriorityPage   from './pages/government/PriorityPage'
 import ActionsPage    from './pages/government/ActionsPage'
 import ReportsPage    from './pages/government/ReportsPage'
+import PredictionsGovPage from './pages/government/PredictionsGovPage'
 
 // ── Route guards ─────────────────────────────────────────────────────────
 
@@ -70,11 +71,12 @@ export default function App() {
         path="/government"
         element={<OfficerRoute><GovernmentDashboard /></OfficerRoute>}
       >
-        <Route path="hotspots"   element={<HotspotsPage />} />
-        <Route path="industries" element={<IndustriesPage />} />
-        <Route path="priority"   element={<PriorityPage />} />
-        <Route path="actions"    element={<ActionsPage />} />
-        <Route path="reports"    element={<ReportsPage />} />
+        <Route path="hotspots"    element={<HotspotsPage />} />
+        <Route path="industries"  element={<IndustriesPage />} />
+        <Route path="priority"    element={<PriorityPage />} />
+        <Route path="predictions" element={<PredictionsGovPage />} />
+        <Route path="actions"     element={<ActionsPage />} />
+        <Route path="reports"     element={<ReportsPage />} />
       </Route>
 
       {/* ── System administrator ── */}
