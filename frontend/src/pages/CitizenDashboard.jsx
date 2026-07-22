@@ -8,6 +8,10 @@ import StatCard from '../components/common/StatCard'
 import AQIBadge from '../components/common/AQIBadge'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import AQITrendChart from '../components/charts/AQITrendChart'
+import AQIAlertBanner from '../components/alerts/AQIAlertBanner'
+import AQIAlertPopup from '../components/alerts/AQIAlertPopup'
+import AQINotificationBell from '../components/alerts/AQINotificationBell'
+import { useAQIAlerts } from '../hooks/useAQIAlerts'
 import {
   CloudIcon, MapIcon, ChartBarIcon, HeartIcon, BuildingOffice2Icon,
   ExclamationCircleIcon,
@@ -35,6 +39,10 @@ function DashboardOverview() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
   const { selectedCity }      = useCityStore()
+
+  // ── Alerts ──────────────────────────────────────────────────────────
+  const { alerts, history, unreadCount, showPopup, markAllRead, dismissPopup } =
+    useAQIAlerts(wards, selectedCity)
 
   useEffect(() => {
     let cancelled = false
@@ -121,14 +129,37 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-6">
+      {/* ── AQI Alert Popup (auto-shown for severe) ── */}
+      {showPopup && alerts.length > 0 && (
+        <AQIAlertPopup alert={alerts[0]} onDismiss={dismissPopup} />
+      )}
+
+      {/* ── Alert Banner ── */}
+      {!loading && validWards.length > 0 && (
+        <AQIAlertBanner
+          avgAQI={avgAQI}
+          worstWard={worstWard}
+          city={selectedCity}
+        />
+      )}
+
       {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Good {greet}</h1>
-        <p className="text-gray-400 text-sm mt-1">
-          Air quality overview for <span className="text-white font-medium">{selectedCity}</span>
-          {' · '}{format(new Date(), 'EEEE, MMMM d')}
-          {validWards.length > 0 && ` · ${validWards.length} wards monitored`}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Good {greet}</h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Air quality overview for <span className="text-white font-medium">{selectedCity}</span>
+            {' · '}{format(new Date(), 'EEEE, MMMM d')}
+            {validWards.length > 0 && ` · ${validWards.length} wards monitored`}
+          </p>
+        </div>
+        {/* Notification bell */}
+        <AQINotificationBell
+          alerts={alerts}
+          history={history}
+          unreadCount={unreadCount}
+          onMarkRead={markAllRead}
+        />
       </div>
 
       {/* Stat cards */}

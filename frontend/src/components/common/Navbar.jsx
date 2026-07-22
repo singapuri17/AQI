@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useCityStore, CITIES_WITH_DATA } from '../../store/cityStore'
+import { aqiAPI } from '../../api'
+import { filterWardsByCity } from '../../store/cityStore'
+import { useAQIAlerts } from '../../hooks/useAQIAlerts'
+import AQINotificationBell from '../alerts/AQINotificationBell'
 import {
   CloudIcon,
   UserCircleIcon,
@@ -42,6 +46,20 @@ export default function Navbar() {
   const isGovPath = location.pathname.startsWith('/government')
   const navLinks = isGovPath ? govLinks : citizenLinks
 
+  // ── AQI data for notification bell (citizen only) ──────────────────
+  const [navWards, setNavWards] = useState([])
+  useEffect(() => {
+    if (isGovPath) return
+    aqiAPI.getCurrentAQI(selectedCity)
+      .then(res => {
+        const all = Array.isArray(res.data) ? res.data : []
+        setNavWards(filterWardsByCity(all, selectedCity))
+      })
+      .catch(() => {})
+  }, [selectedCity, isGovPath])
+
+  const { alerts, history, unreadCount, markAllRead } = useAQIAlerts(navWards, selectedCity)
+
   const handleLogout = () => {
     logout()
     navigate('/')
@@ -80,6 +98,16 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
+            {/* AQI Notification Bell — citizen only */}
+            {!isGovPath && (
+              <AQINotificationBell
+                alerts={alerts}
+                history={history}
+                unreadCount={unreadCount}
+                onMarkRead={markAllRead}
+              />
+            )}
+
             {/* City selector — visible when on citizen path */}
             {!isGovPath && (
               <div className="flex items-center gap-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-2 py-1">
