@@ -8,7 +8,7 @@ import AQITrendChart from '../../components/charts/AQITrendChart'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { format, subDays } from 'date-fns'
 import { useAuthStore } from '../../store/authStore'
-import { useCityStore } from '../../store/cityStore'
+import { useCityStore, CITY_CENTRES } from '../../store/cityStore'
 
 // Normalise a backend hotspot cluster record
 // Backend shape: { cluster_id, ward_ids, ward_names, center_latitude, center_longitude,
@@ -46,15 +46,21 @@ function generateTrend(baseAQI) {
   }))
 }
 
-// Static fallback (used if API returns empty or fails)
-const FALLBACK = [
-  { id:1, cluster_id:0, name:'Naroda Industrial Zone', lat:23.0731, lng:72.6419, aqi:210, severity:210, source:'Industrial' },
-  { id:2, cluster_id:0, name:'Odhav GIDC',             lat:22.9982, lng:72.6403, aqi:196, severity:196, source:'Industrial' },
-  { id:3, cluster_id:1, name:'Vatva Chemical Belt',    lat:22.9805, lng:72.6286, aqi:185, severity:185, source:'Chemical'  },
-  { id:4, cluster_id:2, name:'Bapunagar Road',         lat:23.0437, lng:72.6121, aqi:172, severity:172, source:'Traffic'   },
-  { id:5, cluster_id:1, name:'Vastral Dump Site',      lat:22.9869, lng:72.6598, aqi:158, severity:158, source:'Waste'     },
-  { id:6, cluster_id:2, name:'Nikol Junction',         lat:23.0353, lng:72.6475, aqi:167, severity:167, source:'Traffic'   },
-]
+// City-specific fallbacks (only used if API fails)
+const CITY_FALLBACKS = {
+  Ahmedabad: [
+    { id:1, cluster_id:0, name:'Naroda Industrial Zone', lat:23.0731, lng:72.6419, aqi:210, severity:210, source:'Industrial' },
+    { id:2, cluster_id:1, name:'Vatva Chemical Belt',    lat:22.9805, lng:72.6286, aqi:185, severity:185, source:'Chemical'  },
+  ],
+  Surat: [
+    { id:1, cluster_id:0, name:'Udhna Textile Cluster',  lat:21.1735, lng:72.8560, aqi:240, severity:240, source:'Textile'   },
+    { id:2, cluster_id:1, name:'Sachin GIDC Zone',       lat:21.0900, lng:72.8900, aqi:220, severity:220, source:'Chemical'  },
+  ],
+  Vadodara: [
+    { id:1, cluster_id:0, name:'Makarpura GIDC',         lat:22.2677, lng:73.1732, aqi:250, severity:250, source:'Chemical'  },
+    { id:2, cluster_id:1, name:'Gorwa Industrial Area',  lat:22.3305, lng:73.1490, aqi:210, severity:210, source:'Petrochemical' },
+  ],
+}
 
 export default function HotspotsPage() {
   const [hotspots, setHotspots]         = useState([])
@@ -63,8 +69,12 @@ export default function HotspotsPage() {
   const { user } = useAuthStore()
   const { selectedCity } = useCityStore()
 
+  const city = user?.city || selectedCity || 'Ahmedabad'
+  const cityKey = city.trim().charAt(0).toUpperCase() + city.trim().slice(1).toLowerCase()
+  const centre = CITY_CENTRES[cityKey] || CITY_CENTRES.Ahmedabad
+  const mapCenter = [centre.lat, centre.lng]
+
   useEffect(() => {
-    const city = user?.city || selectedCity || null
     const load = async () => {
       setLoading(true)
       try {
@@ -72,9 +82,9 @@ export default function HotspotsPage() {
         const raw  = Array.isArray(res.data) ? res.data : []
         const norm = raw.map(normaliseHotspot)
         const valid = norm.filter(h => h.lat && h.lng)
-        setHotspots(valid.length > 0 ? valid : FALLBACK)
+        setHotspots(valid.length > 0 ? valid : (CITY_FALLBACKS[cityKey] || []))
       } catch {
-        setHotspots(FALLBACK)
+        setHotspots(CITY_FALLBACKS[cityKey] || [])
       } finally {
         setLoading(false)
       }
@@ -92,6 +102,7 @@ export default function HotspotsPage() {
         </h1>
         <p className="text-gray-400 text-sm mt-0.5">
           DBSCAN-identified pollution clusters · {hotspots.length} hotspots detected
+          {city && <span className="ml-2 text-purple-300 font-medium">· {cityKey}</span>}
         </p>
       </div>
 
@@ -103,7 +114,7 @@ export default function HotspotsPage() {
               <LoadingSpinner text="Loading hotspot data..." />
             </div>
           ) : (
-            <HotspotMap hotspots={hotspots} height="100%" />
+            <HotspotMap hotspots={hotspots} center={mapCenter} height="100%" />
           )}
         </div>
 
