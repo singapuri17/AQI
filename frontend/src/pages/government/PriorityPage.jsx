@@ -73,8 +73,8 @@ export default function PriorityPage() {
   const chartData = rows.map(r => ({ ward: r.ward, aqi: r.aqi }))
 
   const handleAct = (ward, ward_id) => {
-    navigate('/government/actions', { state: { wardPreset: ward } })
-    toast.success(`Creating action for ${ward}`)
+    navigate(`/government/actions?ward=${encodeURIComponent(ward)}`)
+    toast.success(`Opening recommendations for ${ward}`)
   }
 
   return (
