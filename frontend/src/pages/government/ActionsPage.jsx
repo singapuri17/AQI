@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { governmentAPI, aqiAPI } from '../../api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -261,7 +261,6 @@ export default function ActionsPage() {
       const params = new URLSearchParams(location.search)
       const wardParam = params.get('ward')
       if (wardParam) {
-        // Match by name (case-insensitive) or id
         const matched = list.find(
           w => w.ward_name.toLowerCase() === wardParam.toLowerCase() ||
                w.ward_id.toLowerCase()   === wardParam.toLowerCase()
@@ -269,21 +268,56 @@ export default function ActionsPage() {
         if (matched) {
           setExpandedWard(matched.ward_id)
           setHighlightedWard(matched.ward_id)
-          // Scroll after a brief delay for render
           setTimeout(() => {
             wardRefs.current[matched.ward_id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }, 400)
-          // Remove highlight badge after 3s
           setTimeout(() => setHighlightedWard(null), 3000)
         } else {
           setExpandedWard(list[0]?.ward_id || null)
         }
       } else {
-        // No URL param — open first ward by default
         setExpandedWard(list[0]?.ward_id || null)
       }
     }).catch(() => {})
   }, [city, location.search]) // eslint-disable-line
+
+  // ── Eagerly prefetch ALL ward analysis data on load ───────────────────
+  // This makes the PollutionAnalysisPanel work immediately without
+  // requiring accordion expansion.
+  useEffect(() => {
+    if (cityWards.length === 0) return
+    console.log('Prefetching ward analysis for', cityWards.length, 'wards...')
+    const missing = cityWards.filter(w => !wardData[w.ward_id])
+    if (missing.length === 0) return
+
+    // Fetch in parallel batches of 5 to avoid overwhelming the server
+    const BATCH = 5
+    const fetchBatch = async (batch) => {
+      const results = await Promise.allSettled(
+        batch.map(w => governmentAPI.getWardRecommendations(w.ward_id))
+      )
+      const newEntries = {}
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value?.data) {
+          newEntries[batch[i].ward_id] = r.value.data
+        }
+      })
+      if (Object.keys(newEntries).length > 0) {
+        setWardData(prev => {
+          const updated = { ...prev, ...newEntries }
+          console.log('Ward Analysis loaded:', Object.keys(updated).length, 'wards')
+          return updated
+        })
+      }
+    }
+
+    const runBatches = async () => {
+      for (let i = 0; i < missing.length; i += BATCH) {
+        await fetchBatch(missing.slice(i, i + BATCH))
+      }
+    }
+    runBatches()
+  }, [cityWards]) // eslint-disable-line
 
   // ── Load actions ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -299,29 +333,33 @@ export default function ActionsPage() {
   }, [city])
 
   // ── Filter + Search + Sort ────────────────────────────────────────────
-  const filteredWards = cityWards
-    .filter(w => {
-      if (!searchTerm) return true
-      const term = searchTerm.toLowerCase()
-      const d = wardData[w.ward_id]
-      return (
-        w.ward_name.toLowerCase().includes(term) ||
-        w.ward_id.toLowerCase().includes(term)   ||
-        (d?.ward_type || '').toLowerCase().includes(term) ||
-        (d?.industrial_density === 'high' && 'industrial'.includes(term)) ||
-        (d?.traffic_density === 'high'    && 'traffic'.includes(term))    ||
-        (d?.waste_burning === 'high'      && 'waste burning'.includes(term))
-      )
-    })
-    .filter(w => wardMatchesFilter(w, activeFilter, wardData))
-    .sort((a, b) => {
-      const da = wardData[a.ward_id], db = wardData[b.ward_id]
-      if (sortBy === 'Alphabetical') return a.ward_name.localeCompare(b.ward_name)
-      if (sortBy === 'Highest AQI')  return (db?.aqi || 0) - (da?.aqi || 0)
-      return 0
-    })
+  const filteredWards = useMemo(() => {
+    const result = cityWards
+      .filter(w => {
+        if (!searchTerm) return true
+        const term = searchTerm.toLowerCase()
+        const d = wardData[w.ward_id]
+        return (
+          w.ward_name.toLowerCase().includes(term) ||
+          w.ward_id.toLowerCase().includes(term)   ||
+          (d?.ward_type || '').toLowerCase().includes(term) ||
+          (d?.industrial_density === 'high' && 'industrial'.includes(term)) ||
+          (d?.traffic_density === 'high'    && 'traffic'.includes(term))    ||
+          (d?.waste_burning === 'high'      && 'waste burning'.includes(term))
+        )
+      })
+      .filter(w => wardMatchesFilter(w, activeFilter, wardData))
+      .sort((a, b) => {
+        const da = wardData[a.ward_id], db = wardData[b.ward_id]
+        if (sortBy === 'Alphabetical') return a.ward_name.localeCompare(b.ward_name)
+        if (sortBy === 'Highest AQI')  return (db?.aqi || 0) - (da?.aqi || 0)
+        return 0
+      })
+    console.log('Selected Filter:', activeFilter, '| Filtered Wards:', result.length, '| Total WardData:', Object.keys(wardData).length)
+    return result
+  }, [cityWards, searchTerm, activeFilter, sortBy, wardData])
 
-  // Cache ward analysis data when loaded
+  // Cache ward analysis data when loaded (called from WardAnalysisCard)
   const handleWardDataLoaded = useCallback((ward_id, data) => {
     setWardData(prev => ({ ...prev, [ward_id]: data }))
   }, [])
