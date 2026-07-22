@@ -138,9 +138,6 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Data source info — shows real vs synthetic, last updated, auto-refresh countdown */}
-      <DataSourceBadge city={selectedCity} refreshIntervalMs={REFRESH_MS} />
-
       {/* ── AQI Alert Popup (auto-shown for severe) ── */}
       {showPopup && alerts.length > 0 && (
         <AQIAlertPopup alert={alerts[0]} onDismiss={dismissPopup} />
