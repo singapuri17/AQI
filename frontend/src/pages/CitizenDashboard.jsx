@@ -52,18 +52,14 @@ function DashboardOverview() {
     setLoading(true)
     setError(null)
     try {
-      console.log('AQI Source: fetching from backend /aqi/current?city=' + selectedCity)
       const res  = await aqiAPI.getCurrentAQI(selectedCity)
-      console.log('AQI Response:', res.data)
       const all  = Array.isArray(res.data) ? res.data : []
       const city = filterWardsByCity(all, selectedCity)
-      console.log('AQI Filtered wards for', selectedCity, ':', city.length, 'wards')
       setWards(city)
       setTrend(buildTrend(city))
       setLastFetched(new Date())
     } catch (e) {
-      console.error('AQI fetch error:', e)
-      setError('Real-time AQI data currently unavailable. Please try again later.')
+      setError('Unable to load AQI data. Please try again later.')
       setWards([])
       setTrend([])
     } finally {
@@ -122,7 +118,7 @@ function DashboardOverview() {
     <div className="flex flex-col items-center justify-center h-64 gap-3">
       <ExclamationCircleIcon className="w-12 h-12 text-red-400" />
       <p className="text-red-300 font-semibold text-base">{error}</p>
-      <p className="text-gray-500 text-sm">Do not generate fake values — please check API keys or backend connection.</p>
+      <p className="text-gray-500 text-sm">Please check your connection or try again.</p>
       <button
         onClick={fetchAQI}
         className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"

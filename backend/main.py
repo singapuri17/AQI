@@ -32,14 +32,8 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized")
     await seed_data_if_empty()
     await seed_admin_account()
-
-    # Start real-time AQI refresh scheduler (if API key is configured)
-    import asyncio
-    refresh_task = asyncio.create_task(_aqi_refresh_loop())
-
+    # Note: Real-time AQI refresh is disabled — application uses synthetic data
     yield
-
-    refresh_task.cancel()
     logger.info("Shutting down %s", settings.app_name)
 
 

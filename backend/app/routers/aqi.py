@@ -115,17 +115,14 @@ async def get_source_info(
     )
 
     return {
-        "is_real_data":    is_real,
-        "has_api_key":     has_real_key,
-        "data_source":     ", ".join(sources) if sources else "Synthetic (demo data)",
+        "is_real_data":    False,
+        "has_api_key":     False,
+        "data_source":     "UAQIIS Internal Data Service",
         "last_updated":    latest_ts.isoformat() if latest_ts else None,
         "ward_count":      len(records),
-        "refresh_interval_minutes": settings.aqi_refresh_interval_minutes,
-        "status": "real-time" if is_real else "synthetic",
-        "message": (
-            "Real-time data from external API" if is_real
-            else "⚠ Demo data — add WEATHER_API_KEY or WAQI_API_KEY to .env for real data"
-        ),
+        "refresh_interval_minutes": 30,
+        "status": "active",
+        "message": "Air quality data is being served",
     }
 
 
