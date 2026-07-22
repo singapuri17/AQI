@@ -17,7 +17,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models import User
-from app.schemas import OfficerCreate, Token, UserLogin, UserResponse
+from app.schemas import OfficerCreate, OfficerUpdate, Token, UserLogin, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -160,28 +160,25 @@ async def list_officers(
 )
 async def update_officer(
     officer_id: int,
-    full_name: Optional[str] = None,
-    city: Optional[str] = None,
-    gender: Optional[str] = None,
-    date_of_birth: Optional[str] = None,
+    payload: "OfficerUpdate",
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(get_current_admin_user),
 ):
-    """Update mutable fields on an OFFICER account."""
+    """Update mutable fields on an OFFICER account. Accepts JSON body."""
     result = await db.execute(
         select(User).where(User.id == officer_id, User.role == "OFFICER")
     )
     officer = result.scalar_one_or_none()
     if not officer:
         raise HTTPException(status_code=404, detail="Officer not found.")
-    if full_name is not None:
-        officer.full_name = full_name
-    if city is not None:
-        officer.city = city
-    if gender is not None:
-        officer.gender = gender
-    if date_of_birth is not None:
-        officer.date_of_birth = date_of_birth
+    if payload.full_name is not None:
+        officer.full_name = payload.full_name
+    if payload.city is not None:
+        officer.city = payload.city
+    if payload.gender is not None:
+        officer.gender = payload.gender
+    if payload.date_of_birth is not None:
+        officer.date_of_birth = payload.date_of_birth
     await db.commit()
     await db.refresh(officer)
     return UserResponse.model_validate(officer)

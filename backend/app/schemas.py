@@ -38,6 +38,15 @@ class OfficerCreate(BaseModel):
     date_of_birth: Optional[str] = None
 
 
+class OfficerUpdate(BaseModel):
+    """Payload for admin to update an existing officer (all fields optional)."""
+
+    full_name: Optional[str] = Field(None, min_length=2, max_length=255)
+    city: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[str] = None
+
+
 class UserLogin(BaseModel):
     """Credentials for login."""
 
