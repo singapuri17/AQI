@@ -42,9 +42,12 @@ function OfficerRoute({ children }) {
 
 export default function App() {
   const { user } = useAuthStore()
-  const { syncToUser } = useCityStore()
+  const { syncToUser, loadCities } = useCityStore()
 
-  // On app load, sync city to user's registered city
+  // Fetch available cities from backend once on startup
+  useEffect(() => { loadCities() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync city to the logged-in officer's assigned city
   useEffect(() => {
     if (user) syncToUser(user)
   }, [user, syncToUser])

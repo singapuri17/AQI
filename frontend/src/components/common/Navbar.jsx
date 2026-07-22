@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import { useCityStore, CITIES } from '../../store/cityStore'
+import { useCityStore, CITIES_WITH_DATA } from '../../store/cityStore'
 import {
   CloudIcon,
   UserCircleIcon,
@@ -34,7 +34,8 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuthStore()
-  const { selectedCity, setCity } = useCityStore()
+  const { selectedCity, setCity, availableCities } = useCityStore()
+  const cityList = availableCities.length > 0 ? availableCities : CITIES_WITH_DATA
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -95,7 +96,7 @@ export default function Navbar() {
                     onChange={e => setCity(e.target.value)}
                     className="bg-transparent text-sm text-white font-medium focus:outline-none cursor-pointer pr-1"
                   >
-                    {CITIES.map(c => (
+                    {cityList.map(c => (
                       <option key={c} value={c} className="bg-gray-800 text-white">{c}</option>
                     ))}
                   </select>

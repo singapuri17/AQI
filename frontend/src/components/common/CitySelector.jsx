@@ -7,12 +7,14 @@ import {
   CheckIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
-import { useCityStore, CITIES, detectCityFromCoords } from '../../store/cityStore'
+import { useCityStore, CITIES_WITH_DATA, detectCityFromCoords } from '../../store/cityStore'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
 export default function CitySelector({ className = '' }) {
-  const { selectedCity, setCity, setUserLocation, clearUserLocation } = useCityStore()
+  const { selectedCity, setCity, setUserLocation, clearUserLocation, availableCities } = useCityStore()
+  // Use live list from backend; fall back to static list while loading
+  const cityList = availableCities.length > 0 ? availableCities : CITIES_WITH_DATA
   const [open, setOpen]           = useState(false)
   const [locating, setLocating]   = useState(false)
   // Position state for the portal dropdown
@@ -79,7 +81,8 @@ export default function CitySelector({ className = '' }) {
         // Reverse-geocode only to determine the city for AQI data
         const detected = await detectCityFromCoords(coords.latitude, coords.longitude)
         setLocating(false)
-        if (detected) {
+        // Only accept detected city if it's in our available list
+        if (detected && cityList.includes(detected)) {
           setCity(detected)
           toast.success(`Switched to ${detected}`)
         } else {
@@ -117,7 +120,7 @@ export default function CitySelector({ className = '' }) {
       <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider px-3 pt-3 pb-1.5">
         Select City
       </p>
-      {CITIES.map(city => (
+      {cityList.map(city => (
         <button
           key={city}
           onMouseDown={(e) => {
