@@ -27,30 +27,64 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan event handler — runs on startup and shutdown.
-
-    Startup:
-    - Initialize the database (create tables)
-    - Seed synthetic data if the database is empty
-
-    Shutdown:
-    - No cleanup needed (SQLAlchemy connections are managed per-request)
-    """
     logger.info("Starting %s v%s", settings.app_name, settings.app_version)
-
-    # Initialize DB (create tables if they don't exist)
     await init_db()
     logger.info("Database initialized")
-
-    # Seed synthetic data if the database is empty
     await seed_data_if_empty()
-
-    # Always ensure the default admin account exists
     await seed_admin_account()
+
+    # Start real-time AQI refresh scheduler (if API key is configured)
+    import asyncio
+    refresh_task = asyncio.create_task(_aqi_refresh_loop())
 
     yield
 
+    refresh_task.cancel()
     logger.info("Shutting down %s", settings.app_name)
+
+
+async def _aqi_refresh_loop() -> None:
+    """Background loop: refresh AQI from real API every N minutes."""
+    import asyncio
+    from app.config import get_settings
+    from app.database import AsyncSessionLocal
+    from app.models import WardBoundary
+    from app.services.real_aqi_service import RealTimeAQIIngestor
+    from sqlalchemy import select
+
+    s = get_settings()
+    interval = s.aqi_refresh_interval_minutes * 60   # convert to seconds
+
+    if not s.weather_api_key and not s.waqi_api_key:
+        logger.info(
+            "AQI auto-refresh: no API key configured. "
+            "Set WEATHER_API_KEY or WAQI_API_KEY in backend/.env to enable real-time data."
+        )
+        return
+
+    ingestor = RealTimeAQIIngestor(owm_key=s.weather_api_key, waqi_token=s.waqi_api_key)
+    logger.info("AQI auto-refresh scheduler started (interval: %d min)", s.aqi_refresh_interval_minutes)
+
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(WardBoundary.ward_id, WardBoundary.ward_name,
+                           WardBoundary.center_latitude, WardBoundary.center_longitude)
+                )
+                wards = [
+                    {"ward_id": r[0], "ward_name": r[1], "lat": r[2], "lon": r[3]}
+                    for r in result.all() if r[2] and r[3]
+                ]
+                if wards:
+                    summary = await ingestor.ingest_all_wards(db, wards)
+                    logger.info("Auto-refresh complete: %s", summary)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("Auto-refresh error: %s", exc)
+
+        await asyncio.sleep(interval)
 
 
 async def seed_data_if_empty() -> None:

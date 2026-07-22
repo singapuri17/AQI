@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/common/Sidebar'
 import CitySelector from '../components/common/CitySelector'
+import DataSourceBadge from '../components/common/DataSourceBadge'
 import { aqiAPI } from '../api'
 import { useCityStore, filterWardsByCity } from '../store/cityStore'
 import StatCard from '../components/common/StatCard'
@@ -14,10 +15,12 @@ import AQINotificationBell from '../components/alerts/AQINotificationBell'
 import { useAQIAlerts } from '../hooks/useAQIAlerts'
 import {
   CloudIcon, MapIcon, ChartBarIcon, HeartIcon, BuildingOffice2Icon,
-  ExclamationCircleIcon,
+  ExclamationCircleIcon, ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import { getAQICategory } from '../utils/aqiUtils'
 import { format, subDays } from 'date-fns'
+
+const REFRESH_MS = 30 * 60 * 1000   // 30 minutes
 
 // Build a stable 7-day trend from the ward array
 function buildTrend(wards) {
@@ -38,43 +41,46 @@ function DashboardOverview() {
   const [trendData, setTrend] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
+  const [lastFetched, setLastFetched] = useState(null)
   const { selectedCity }      = useCityStore()
 
   // ── Alerts ──────────────────────────────────────────────────────────
   const { alerts, history, unreadCount, showPopup, markAllRead, dismissPopup } =
     useAQIAlerts(wards, selectedCity)
 
-  useEffect(() => {
-    let cancelled = false
-    const fetch = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        console.log('AQI Source: Synthetic/mock data — SQLite DB seeded at startup. NOT real-time.')
-        console.log('AQI Fetch: GET /aqi/current?city=' + selectedCity)
-        const res  = await aqiAPI.getCurrentAQI(selectedCity)
-        console.log('AQI Response:', res.data)
-        const all  = Array.isArray(res.data) ? res.data : []
-        const city = filterWardsByCity(all, selectedCity)
-        console.log('AQI Filtered wards for', selectedCity, ':', city.length, 'wards')
-        if (!cancelled) {
-          setWards(city)
-          setTrend(buildTrend(city))
-        }
-      } catch (e) {
-        if (!cancelled) {
-          console.error('Dashboard AQI fetch error:', e)
-          setError('Could not load AQI data. Make sure the backend is running.')
-          setWards([])
-          setTrend([])
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+  const fetchAQI = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      console.log('AQI Source: fetching from backend /aqi/current?city=' + selectedCity)
+      const res  = await aqiAPI.getCurrentAQI(selectedCity)
+      console.log('AQI Response:', res.data)
+      const all  = Array.isArray(res.data) ? res.data : []
+      const city = filterWardsByCity(all, selectedCity)
+      console.log('AQI Filtered wards for', selectedCity, ':', city.length, 'wards')
+      setWards(city)
+      setTrend(buildTrend(city))
+      setLastFetched(new Date())
+    } catch (e) {
+      console.error('AQI fetch error:', e)
+      setError('Real-time AQI data currently unavailable. Please try again later.')
+      setWards([])
+      setTrend([])
+    } finally {
+      setLoading(false)
     }
-    fetch()
-    return () => { cancelled = true }
   }, [selectedCity])
+
+  // Fetch on mount and city change
+  useEffect(() => {
+    fetchAQI()
+  }, [fetchAQI])
+
+  // Auto-refresh every 30 minutes
+  useEffect(() => {
+    const timer = setInterval(fetchAQI, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [fetchAQI])
 
   const validWards = wards.filter(w => (w.aqi_value ?? w.aqi ?? 0) > 0)
 
@@ -114,13 +120,14 @@ function DashboardOverview() {
 
   if (error) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3">
-      <ExclamationCircleIcon className="w-10 h-10 text-red-400" />
-      <p className="text-red-400 font-medium">{error}</p>
+      <ExclamationCircleIcon className="w-12 h-12 text-red-400" />
+      <p className="text-red-300 font-semibold text-base">{error}</p>
+      <p className="text-gray-500 text-sm">Do not generate fake values — please check API keys or backend connection.</p>
       <button
-        onClick={() => window.location.reload()}
-        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+        onClick={fetchAQI}
+        className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
       >
-        Retry
+        <ArrowPathIcon className="w-4 h-4" /> Retry
       </button>
     </div>
   )
@@ -131,17 +138,8 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Data source disclaimer banner */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/40 text-xs text-gray-400">
-        <span className="w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" />
-        <span>
-          <strong className="text-yellow-400">Demo Data</strong> — AQI values are{' '}
-          <strong className="text-white">synthetically generated</strong> (not real-time).
-          {' '}Base AQI per ward + diurnal/seasonal variation + random noise.
-          {' '}Source: <code className="text-gray-300 bg-gray-700 px-1 rounded">air_quality.db</code> (SQLite, seeded at startup).
-          {' '}No auto-refresh.
-        </span>
-      </div>
+      {/* Data source info — shows real vs synthetic, last updated, auto-refresh countdown */}
+      <DataSourceBadge city={selectedCity} refreshIntervalMs={REFRESH_MS} />
 
       {/* ── AQI Alert Popup (auto-shown for severe) ── */}
       {showPopup && alerts.length > 0 && (
