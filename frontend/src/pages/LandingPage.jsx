@@ -196,16 +196,8 @@ export default function LandingPage() {
           })}
         </div>
 
-        {/* CTA below features */}
-        <div className="mt-12 text-center">
-          <button
-            onClick={() => navigate('/citizen')}
-            className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white text-base font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.03] active:scale-100"
-          >
-            Explore AQI
-            <ArrowRightIcon className="w-5 h-5" />
-          </button>
-        </div>
+        
+        
       </section>
 
       {/* ── AQI reference bar ────────────────────────────────────────── */}
