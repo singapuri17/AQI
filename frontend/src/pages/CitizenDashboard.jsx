@@ -50,11 +50,13 @@ function DashboardOverview() {
       setLoading(true)
       setError(null)
       try {
-        // Pass the city param so the backend can pre-filter if it supports it;
-        // filterWardsByCity is a client-side safety net for when it doesn't.
+        console.log('AQI Source: Synthetic/mock data — SQLite DB seeded at startup. NOT real-time.')
+        console.log('AQI Fetch: GET /aqi/current?city=' + selectedCity)
         const res  = await aqiAPI.getCurrentAQI(selectedCity)
+        console.log('AQI Response:', res.data)
         const all  = Array.isArray(res.data) ? res.data : []
         const city = filterWardsByCity(all, selectedCity)
+        console.log('AQI Filtered wards for', selectedCity, ':', city.length, 'wards')
         if (!cancelled) {
           setWards(city)
           setTrend(buildTrend(city))
@@ -129,6 +131,18 @@ function DashboardOverview() {
 
   return (
     <div className="space-y-6">
+      {/* Data source disclaimer banner */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700/40 text-xs text-gray-400">
+        <span className="w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" />
+        <span>
+          <strong className="text-yellow-400">Demo Data</strong> — AQI values are{' '}
+          <strong className="text-white">synthetically generated</strong> (not real-time).
+          {' '}Base AQI per ward + diurnal/seasonal variation + random noise.
+          {' '}Source: <code className="text-gray-300 bg-gray-700 px-1 rounded">air_quality.db</code> (SQLite, seeded at startup).
+          {' '}No auto-refresh.
+        </span>
+      </div>
+
       {/* ── AQI Alert Popup (auto-shown for severe) ── */}
       {showPopup && alerts.length > 0 && (
         <AQIAlertPopup alert={alerts[0]} onDismiss={dismissPopup} />
