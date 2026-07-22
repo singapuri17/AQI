@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore'
 import { useCityStore } from '../store/cityStore'
 import {
   ExclamationTriangleIcon, ShieldCheckIcon, BoltIcon, DocumentTextIcon,
-  BuildingStorefrontIcon, StarIcon
+  BuildingStorefrontIcon, StarIcon, HomeIcon
 } from '@heroicons/react/24/outline'
 import { format } from 'date-fns'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
@@ -35,7 +35,7 @@ const STATUS_CLS = {
   in_progress: 'bg-purple-500/20  text-purple-400  border-purple-500/30',
 }
 
-function GovernmentOverview() {
+export function GovernmentOverview({ isAdmin = false }) {
   const [wardData, setWardData]         = useState([])
   const [recentActions, setRecentActions] = useState([])
   const [topPriority, setTopPriority]   = useState([])
@@ -57,10 +57,8 @@ function GovernmentOverview() {
           hotspotsAPI.getPriorityRanking(city),
         ])
 
-        // ── AQI wards ─────────────────────────────────────────────────
         if (aqiRes.status === 'fulfilled') {
           const list = Array.isArray(aqiRes.value.data) ? aqiRes.value.data : []
-          // normalise to { ward, aqi } for WardRankingChart
           const normalised = list
             .map(w => ({
               ward: w.ward_name ?? w.name ?? w.ward_id ?? '—',
@@ -68,31 +66,25 @@ function GovernmentOverview() {
             }))
             .sort((a, b) => b.aqi - a.aqi)
           setWardData(normalised)
-
-          // Count high-risk wards (AQI > 150)
           const highRisk = list.filter(w => (w.aqi_value ?? w.aqi ?? 0) > 150).length
           setStats(s => ({ ...s, highRisk }))
         }
 
-        // ── Hotspots ──────────────────────────────────────────────────
         if (hotspotsRes.status === 'fulfilled') {
           const hs = Array.isArray(hotspotsRes.value.data) ? hotspotsRes.value.data : []
           setStats(s => ({ ...s, hotspots: hs.length }))
         }
 
-        // ── Actions ───────────────────────────────────────────────────
         if (actionsRes.status === 'fulfilled') {
           const acts = Array.isArray(actionsRes.value.data) ? actionsRes.value.data : []
           setStats(s => ({ ...s, actions: acts.length }))
           setRecentActions(acts.slice(0, 5))
         }
 
-        // ── Priority ranking ──────────────────────────────────────────
         if (priorityRes.status === 'fulfilled') {
           const pr = Array.isArray(priorityRes.value.data) ? priorityRes.value.data : []
           setTopPriority(pr.slice(0, 5))
         }
-
       } catch (e) {
         console.error('Gov dashboard load error:', e)
       } finally {
@@ -100,13 +92,18 @@ function GovernmentOverview() {
       }
     }
     loadAll()
-  }, [user?.city, selectedCity])   // re-fetch when city changes
+  }, [user?.city, selectedCity])
 
-  const quickLinks = [
-    { to: '/government/hotspots',  icon: ExclamationTriangleIcon, label: 'View Hotspots',   color: 'orange' },
-    { to: '/government/industries',icon: BuildingStorefrontIcon,  label: 'Industries',       color: 'yellow' },
-    { to: '/government/priority',  icon: StarIcon,                label: 'Priority Ranking', color: 'purple' },
-    { to: '/government/actions',   icon: BoltIcon,                label: 'Manage Actions',   color: 'blue'   },
+  const quickLinks = isAdmin ? [
+    { to: '/admin', icon: HomeIcon, label: 'Admin Home', color: 'purple' },
+    { to: '/government/actions', icon: BoltIcon, label: 'Manage Actions', color: 'blue' },
+    { to: '/government/reports', icon: DocumentTextIcon, label: 'Reports', color: 'purple' },
+    { to: '/government/priority', icon: StarIcon, label: 'Priority Ranking', color: 'yellow' },
+  ] : [
+    { to: '/government/hotspots', icon: ExclamationTriangleIcon, label: 'View Hotspots', color: 'orange' },
+    { to: '/government/industries', icon: BuildingStorefrontIcon, label: 'Industries', color: 'yellow' },
+    { to: '/government/priority', icon: StarIcon, label: 'Priority Ranking', color: 'purple' },
+    { to: '/government/actions', icon: BoltIcon, label: 'Manage Actions', color: 'blue' },
   ]
 
   if (loading) {
@@ -119,9 +116,10 @@ function GovernmentOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Government Control Center</h1>
+        <h1 className="text-2xl font-bold text-white">
+          {isAdmin ? 'Administration Control Center' : 'Government Control Center'}
+        </h1>
         <p className="text-gray-400 text-sm mt-1">
           Welcome, {user?.full_name || user?.name} · {format(new Date(), 'EEEE, MMMM d yyyy')}
           {displayCity && (
@@ -130,27 +128,27 @@ function GovernmentOverview() {
             </span>
           )}
         </p>
+        {isAdmin && (
+          <p className="text-gray-500 text-sm mt-1">
+            Administrator overview with an expanded view of city and system metrics.
+          </p>
+        )}
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={ExclamationTriangleIcon} title="Pollution Hotspots" value={stats.hotspots}  color="red"    />
-        <StatCard icon={ShieldCheckIcon}         title="High-Risk Wards"   value={stats.highRisk}  color="orange" />
-        <StatCard icon={BoltIcon}                title="Active Interventions" value={stats.actions} color="blue"   />
-        <StatCard icon={DocumentTextIcon}        title="Reports Generated" value={stats.reports}   color="purple" />
+        <StatCard icon={ExclamationTriangleIcon} title="Pollution Hotspots" value={stats.hotspots} color="red" />
+        <StatCard icon={ShieldCheckIcon} title="High-Risk Wards" value={stats.highRisk} color="orange" />
+        <StatCard icon={BoltIcon} title="Active Interventions" value={stats.actions} color="blue" />
+        <StatCard icon={DocumentTextIcon} title="Reports Generated" value={stats.reports} color="purple" />
       </div>
 
-      {/* Charts row */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Ward ranking bar chart */}
         <div className="lg:col-span-2">
           <WardRankingChart
             data={wardData.slice(0, 8)}
             title={`Ward AQI Rankings (Top ${Math.min(8, wardData.length)} of ${wardData.length})`}
           />
         </div>
-
-        {/* Pollutant pie chart */}
         <div className="glass-card p-5">
           <h3 className="text-sm font-semibold text-gray-300 mb-4">Pollutant Breakdown</h3>
           <ResponsiveContainer width="100%" height={180}>
@@ -184,9 +182,7 @@ function GovernmentOverview() {
         </div>
       </div>
 
-      {/* Bottom row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent actions */}
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-300">Recent Actions</h3>
@@ -213,9 +209,7 @@ function GovernmentOverview() {
                     <p className="text-sm font-medium text-white">{action.action_type}</p>
                     <p className="text-xs text-gray-400">{action.ward_id ?? action.ward}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full border font-medium ${
-                    STATUS_CLS[action.status] || STATUS_CLS.pending
-                  }`}>
+                  <span className={`text-xs px-2 py-1 rounded-full border font-medium ${STATUS_CLS[action.status] || STATUS_CLS.pending}`}>
                     {action.status}
                   </span>
                 </div>
@@ -223,8 +217,6 @@ function GovernmentOverview() {
             </div>
           )}
         </div>
-
-        {/* Top 5 priority wards */}
         <div className="glass-card p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-300">Priority Wards (Top 5)</h3>
@@ -233,7 +225,6 @@ function GovernmentOverview() {
             </Link>
           </div>
           {topPriority.length === 0 && wardData.length > 0 ? (
-            // Fallback: use ward AQI data directly
             <div className="space-y-2">
               {wardData.slice(0, 5).map((w, i) => (
                 <div key={w.ward} className="flex items-center gap-3">
@@ -252,9 +243,7 @@ function GovernmentOverview() {
                   <span className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                     {row.rank ?? i + 1}
                   </span>
-                  <span className="flex-1 text-sm text-gray-300 truncate">
-                    {row.ward_name ?? row.ward ?? row.ward_id}
-                  </span>
+                  <span className="flex-1 text-sm text-gray-300 truncate">{row.ward_name ?? row.ward ?? row.ward_id}</span>
                   <AQIBadge value={row.current_aqi ?? row.aqi ?? 0} size="sm" />
                 </div>
               ))}
@@ -263,7 +252,6 @@ function GovernmentOverview() {
         </div>
       </div>
 
-      {/* Quick action tiles */}
       <div>
         <h2 className="text-lg font-semibold text-white mb-4">Quick Access</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -273,11 +261,7 @@ function GovernmentOverview() {
               to={to}
               className="glass-card p-4 flex flex-col items-center text-center hover:scale-[1.03] transition-transform gap-2"
             >
-              <Icon className={`w-7 h-7 ${
-                color === 'orange' ? 'text-orange-400' :
-                color === 'yellow' ? 'text-yellow-400' :
-                color === 'purple' ? 'text-purple-400' : 'text-blue-400'
-              }`} />
+              <Icon className={`w-7 h-7 ${color === 'orange' ? 'text-orange-400' : color === 'yellow' ? 'text-yellow-400' : color === 'purple' ? 'text-purple-400' : 'text-blue-400'}`} />
               <span className="text-sm font-medium text-gray-200">{label}</span>
             </Link>
           ))}

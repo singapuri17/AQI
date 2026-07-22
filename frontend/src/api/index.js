@@ -7,13 +7,15 @@ export const authAPI = {
 }
 
 export const adminAPI = {
-  // Register a new OFFICER (multipart so the document file can be included)
+  // Officer CRUD
   registerOfficer: (formData) =>
     axios.post('/auth/officers', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-  listOfficers: ()              => axios.get('/auth/officers'),
-  deleteOfficer: (id)           => axios.delete(`/auth/officers/${id}`),
+  listOfficers:    ()         => axios.get('/auth/officers'),
+  updateOfficer:   (id, data) => axios.patch(`/auth/officers/${id}`, data),
+  toggleOfficer:   (id)       => axios.patch(`/auth/officers/${id}/toggle`),
+  deleteOfficer:   (id)       => axios.delete(`/auth/officers/${id}`),
 }
 
 export const aqiAPI = {

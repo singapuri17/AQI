@@ -153,6 +153,63 @@ async def list_officers(
     return [UserResponse.model_validate(o) for o in officers]
 
 
+@router.patch(
+    "/officers/{officer_id}",
+    response_model=UserResponse,
+    summary="Update an officer's details (ADMIN only)",
+)
+async def update_officer(
+    officer_id: int,
+    full_name: Optional[str] = None,
+    city: Optional[str] = None,
+    gender: Optional[str] = None,
+    date_of_birth: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Update mutable fields on an OFFICER account."""
+    result = await db.execute(
+        select(User).where(User.id == officer_id, User.role == "OFFICER")
+    )
+    officer = result.scalar_one_or_none()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found.")
+    if full_name is not None:
+        officer.full_name = full_name
+    if city is not None:
+        officer.city = city
+    if gender is not None:
+        officer.gender = gender
+    if date_of_birth is not None:
+        officer.date_of_birth = date_of_birth
+    await db.commit()
+    await db.refresh(officer)
+    return UserResponse.model_validate(officer)
+
+
+@router.patch(
+    "/officers/{officer_id}/toggle",
+    response_model=UserResponse,
+    summary="Toggle an officer's active status (ADMIN only)",
+)
+async def toggle_officer(
+    officer_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_current_admin_user),
+):
+    """Activate or deactivate an OFFICER account."""
+    result = await db.execute(
+        select(User).where(User.id == officer_id, User.role == "OFFICER")
+    )
+    officer = result.scalar_one_or_none()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found.")
+    officer.is_active = not officer.is_active
+    await db.commit()
+    await db.refresh(officer)
+    return UserResponse.model_validate(officer)
+
+
 @router.delete(
     "/officers/{officer_id}",
     status_code=status.HTTP_204_NO_CONTENT,

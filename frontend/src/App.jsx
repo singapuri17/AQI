@@ -3,9 +3,6 @@ import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import { useCityStore } from './store/cityStore'
 
-import RegisterPage from './pages/RegisterPage'
-
-
 import LandingPage        from './pages/LandingPage'
 import LoginPage          from './pages/LoginPage'
 import CitizenDashboard   from './pages/CitizenDashboard'
