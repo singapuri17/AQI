@@ -1,5 +1,6 @@
 """Pydantic schemas for request validation and response serialization."""
 
+import json
 from datetime import datetime
 from typing import Any, Optional
 
@@ -223,16 +224,152 @@ class ConstructionSiteResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class UserHealthProfile(BaseModel):
+    """Extensible user health profile for personalised advisories."""
+
+    age_category: str = Field(..., pattern="^(child|adult|elderly)$")
+    conditions: dict[str, bool] = Field(default_factory=dict)
+    # Future: pregnancy, heart_disease, outdoor_occupation, etc. via conditions dict
+
+    def has_condition(self, key: str) -> bool:
+        return bool(self.conditions.get(key, False))
+
+
+class EnvironmentalContext(BaseModel):
+    """Environmental readings and location context for health analysis."""
+
+    aqi_level: float = Field(..., ge=0)
+    aqi_category: Optional[str] = None
+    pm25: Optional[float] = Field(None, ge=0)
+    pm10: Optional[float] = Field(None, ge=0)
+    no2: Optional[float] = Field(None, ge=0)
+    so2: Optional[float] = Field(None, ge=0)
+    co: Optional[float] = Field(None, ge=0)
+    o3: Optional[float] = Field(None, ge=0)
+    ward_id: Optional[str] = None
+    ward_name: Optional[str] = None
+    city: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    source: Optional[str] = None
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
 class HealthAdvisoryRequest(BaseModel):
     """Request to generate a personalised health advisory."""
 
     aqi_level: float = Field(..., ge=0)
     age_category: str = Field(..., pattern="^(child|adult|elderly)$")
     has_respiratory_condition: bool = False
+    health_conditions: dict[str, bool] = Field(default_factory=dict)
     language: str = Field(default="en", pattern="^(en|hi|gu)$")
     ward_id: Optional[str] = None
+    ward_name: Optional[str] = None
+    city: Optional[str] = None
+    aqi_category: Optional[str] = None
+    pm25: Optional[float] = Field(None, ge=0)
+    pm10: Optional[float] = Field(None, ge=0)
+    no2: Optional[float] = Field(None, ge=0)
+    so2: Optional[float] = Field(None, ge=0)
+    co: Optional[float] = Field(None, ge=0)
+    o3: Optional[float] = Field(None, ge=0)
+    timestamp: Optional[datetime] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    source: Optional[str] = None
+    environmental_extra: dict[str, Any] = Field(default_factory=dict)
+
+    def merged_conditions(self) -> dict[str, bool]:
+        """Merge legacy respiratory flag with extensible conditions dict."""
+        conditions = dict(self.health_conditions)
+        if self.has_respiratory_condition:
+            conditions["respiratory"] = True
+        return conditions
+
+    def to_environmental_context(self, aqi_category: Optional[str] = None) -> EnvironmentalContext:
+        return EnvironmentalContext(
+            aqi_level=self.aqi_level,
+            aqi_category=self.aqi_category or aqi_category,
+            pm25=self.pm25,
+            pm10=self.pm10,
+            no2=self.no2,
+            so2=self.so2,
+            co=self.co,
+            o3=self.o3,
+            ward_id=self.ward_id,
+            ward_name=self.ward_name,
+            city=self.city,
+            timestamp=self.timestamp,
+            latitude=self.latitude,
+            longitude=self.longitude,
+            source=self.source,
+            extra=self.environmental_extra,
+        )
+
+    def to_health_profile(self) -> UserHealthProfile:
+        return UserHealthProfile(
+            age_category=self.age_category,
+            conditions=self.merged_conditions(),
+        )
+
+
+class ElevatedPollutant(BaseModel):
+    pollutant: str
+    value: Optional[float] = None
+    unit: str = "µg/m³"
+    health_impact: str
+
+
+class PollutionAnalysis(BaseModel):
+    primary_pollutant: str
+    why_aqi_dangerous: str
+    elevated_pollutants: list[ElevatedPollutant] = Field(default_factory=list)
+
+
+class RecommendationSection(BaseModel):
+    recommendation: str
+    reasoning: str
+
+
+class MaskRecommendation(BaseModel):
+    mask_type: str
+    reasoning: str
+
+
+class IndoorSafety(BaseModel):
+    windows: str
+    air_purifier: str
+    hydration: str
+    other_recommendations: list[str] = Field(default_factory=list)
+    reasoning: str
+
+
+class PersonalizedHealthRisk(BaseModel):
+    risk_level: str
+    explanation: str
+    sensitive_population_warnings: list[str] = Field(default_factory=list)
+
+
+class EmergencyWarning(BaseModel):
+    active: bool = False
+    message: str = ""
+    when_to_seek_care: str = ""
+
+
+class StructuredHealthAdvice(BaseModel):
+    """Structured AI health advisory for frontend rendering."""
+
+    overall_summary: str
+    pollution_analysis: PollutionAnalysis
+    activity_recommendation: RecommendationSection
+    mask_recommendation: MaskRecommendation
+    indoor_safety: IndoorSafety
+    personalized_health_risk: PersonalizedHealthRisk
+    symptoms_to_watch: list[str] = Field(default_factory=list)
+    emergency_warning: Optional[EmergencyWarning] = None
+    long_term_advice: list[str] = Field(default_factory=list)
+    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class HealthAdvisoryResponse(BaseModel):
@@ -246,9 +383,28 @@ class HealthAdvisoryResponse(BaseModel):
     risk_score: float
     risk_category: str
     advice_text: str
+    advice_json: Optional[str] = None
+    advice: StructuredHealthAdvice
     language: str
     ward_id: Optional[str] = None
     created_at: datetime
+
+    @field_validator("advice", mode="before")
+    @classmethod
+    def parse_advice(cls, value, info):
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except Exception:
+                return {"overall_summary": value}
+        if value is None and info.context is not None:
+            source = info.context.get("advice_json") if isinstance(info.context, dict) else None
+            if isinstance(source, str):
+                try:
+                    return json.loads(source)
+                except Exception:
+                    return {"overall_summary": source}
+        return value
 
     model_config = {"from_attributes": True}
 

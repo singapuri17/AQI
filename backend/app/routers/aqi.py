@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.auth import get_current_government_user, get_current_user
 from app.database import get_db
@@ -13,6 +14,8 @@ from app.models import AQIData
 from app.schemas import AQIDataCreate, AQIDataResponse
 
 router = APIRouter(prefix="/aqi", tags=["AQI Data"])
+
+logger = logging.getLogger(__name__)
 
 
 def _aqi_category(aqi: float) -> str:
@@ -186,9 +189,16 @@ async def get_wards(
     summary="List all available cities",
 )
 async def get_cities(db: AsyncSession = Depends(get_db)):
-    """Return distinct city names available in the database."""
-    from app.models import WardBoundary
-    result = await db.execute(select(WardBoundary.city).distinct().order_by(WardBoundary.city))
+    """Return distinct city names that currently have AQI data."""
+    from sqlalchemy import distinct
+    from app.models import AQIData, WardBoundary
+
+    query = (
+        select(distinct(WardBoundary.city))
+        .join(AQIData, AQIData.ward_id == WardBoundary.ward_id)
+        .order_by(WardBoundary.city)
+    )
+    result = await db.execute(query)
     cities = [row[0] for row in result.all() if row[0]]
     return cities
 

@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import json
+
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import HealthAdvisory, User
@@ -79,14 +81,14 @@ async def get_health_advice(
         has_respiratory=payload.has_respiratory_condition,
     )
 
-    # Generate AI advice
+    # Generate AI advice using the full environmental context and profile.
     gemini = GeminiService()
-    advice_text = await gemini.generate_health_advice(
-        aqi=payload.aqi_level,
-        age_category=payload.age_category,
-        has_respiratory=payload.has_respiratory_condition,
+    summary, advice_json = await gemini.generate_health_advice(
+        environmental_context=payload.to_environmental_context(
+            aqi_category=payload.aqi_category
+        ),
+        health_profile=payload.to_health_profile(),
         language=payload.language,
-        risk_category=risk_result["risk_category"],
     )
 
     advisory = HealthAdvisory(
@@ -96,7 +98,8 @@ async def get_health_advice(
         has_respiratory_condition=payload.has_respiratory_condition,
         risk_score=risk_result["risk_score"],
         risk_category=risk_result["risk_category"],
-        advice_text=advice_text,
+        advice_text=summary,
+        advice_json=json.dumps(advice_json, ensure_ascii=False),
         language=payload.language,
         ward_id=payload.ward_id,
     )

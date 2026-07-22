@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import ast
+import json
 import logging
+import re
+from datetime import datetime
 from typing import Any
+
+from app.schemas import EnvironmentalContext, UserHealthProfile
 
 logger = logging.getLogger(__name__)
 
@@ -95,44 +101,342 @@ class GeminiService:
 
     async def generate_health_advice(
         self,
-        aqi: float,
-        age_category: str,
-        has_respiratory: bool,
+        environmental_context: EnvironmentalContext,
+        health_profile: UserHealthProfile,
         language: str = "en",
-        risk_category: str = "moderate",
-    ) -> str:
-        """Generate personalised health advice based on AQI and user profile.
+    ) -> tuple[str, dict[str, Any]]:
+        """Generate personalised structured health advice using Gemini AI.
 
         Args:
-            aqi: Current AQI value.
-            age_category: ``child``, ``adult``, or ``elderly``.
-            has_respiratory: Whether the user has a respiratory condition.
+            environmental_context: Environmental pollutant and location context.
+            health_profile: User health profile and conditions.
             language: Response language — ``en``, ``hi``, or ``gu``.
-            risk_category: Pre-computed risk category string.
 
         Returns:
-            Human-readable health advice text.
+            Tuple of human-readable summary and structured advice dictionary.
         """
         lang_map = {"en": "English", "hi": "Hindi", "gu": "Gujarati"}
         lang_full = lang_map.get(language, "English")
 
-        respiratory_note = (
-            "The person has a pre-existing respiratory condition (e.g. asthma)."
-            if has_respiratory
-            else "No known respiratory conditions."
+        conditions = [
+            key.replace("_", " ").title()
+            for key, value in health_profile.conditions.items()
+            if value
+        ]
+        if not conditions:
+            condition_text = "No pre-existing health conditions reported."
+        else:
+            condition_text = "The user has: " + ", ".join(conditions) + "."
+
+        pollutant_lines = []
+        for key in ("pm25", "pm10", "no2", "so2", "co", "o3"):
+            value = getattr(environmental_context, key)
+            if value is not None:
+                pollutant_lines.append(f"{key.upper()}: {value:.1f}")
+        pollutant_summary = ", ".join(pollutant_lines) if pollutant_lines else "No pollutant readings available."
+
+        ward_text = environmental_context.ward_name or environmental_context.ward_id or "the selected ward"
+        city_text = environmental_context.city or "the city"
+        timestamp_text = (
+            environmental_context.timestamp.isoformat()
+            if environmental_context.timestamp
+            else "the current time"
+        )
+        location_text = (
+            f"Latitude {environmental_context.latitude}, Longitude {environmental_context.longitude}."
+            if environmental_context.latitude is not None and environmental_context.longitude is not None
+            else ""
         )
 
         prompt = (
-            f"You are an expert public health advisor. "
-            f"The current Air Quality Index (AQI) is {aqi:.0f} (risk level: {risk_category}). "
-            f"The user is a {age_category}. {respiratory_note} "
-            f"Provide a concise, actionable health advisory in {lang_full}. "
-            f"Include: what activities to avoid, what protective measures to take, "
-            f"and when to seek medical help. Keep it under 150 words and in a friendly tone."
+            "You are an Environmental Health Specialist. Analyze all available air quality data and the user's health profile. "
+            "Do not rely only on AQI values; explain pollutant composition, the primary health risk driver, and the specific reason each recommendation is made. "
+            "Return exactly one JSON object with the keys: overall_summary, pollution_analysis, activity_recommendation, mask_recommendation, indoor_safety, personalized_health_risk, symptoms_to_watch, emergency_warning, long_term_advice, extra. "
+            "Use concise but specific explanations. Avoid generic phrases and repeat the reasoning in each section. "
+            "If a field has no relevant data, use a brief meaningful fallback value."
+            "\n\nEnvironmental data:\n"
+            f"  AQI: {environmental_context.aqi_level:.0f}\n"
+            f"  AQI Category: {environmental_context.aqi_category or 'N/A'}\n"
+            f"  PM2.5: {environmental_context.pm25 or 'N/A'}\n"
+            f"  PM10: {environmental_context.pm10 or 'N/A'}\n"
+            f"  NO₂: {environmental_context.no2 or 'N/A'}\n"
+            f"  SO₂: {environmental_context.so2 or 'N/A'}\n"
+            f"  CO: {environmental_context.co or 'N/A'}\n"
+            f"  O₃: {environmental_context.o3 or 'N/A'}\n"
+            f"  Ward: {ward_text}\n"
+            f"  City: {city_text}\n"
+            f"  Timestamp: {timestamp_text}\n"
+            f"  {location_text}\n"
+            f"  Source: {environmental_context.source or 'unknown'}\n"
+            "\nUser profile:\n"
+            f"  Age category: {health_profile.age_category}\n"
+            f"  Conditions: {condition_text}\n"
+            "\nStructured JSON schema:\n"
+            "{
+"
+            "  \"overall_summary\": \"string\",
+"
+            "  \"pollution_analysis\": {
+"
+            "    \"primary_pollutant\": \"string\",
+"
+            "    \"why_aqi_dangerous\": \"string\",
+"
+            "    \"elevated_pollutants\": [
+"
+            "      { \"pollutant\": \"string\", \"value\": number|null, \"unit\": \"µg/m³\", \"health_impact\": \"string\" }
+"
+            "    ]
+"
+            "  },
+"
+            "  \"activity_recommendation\": { \"recommendation\": \"string\", \"reasoning\": \"string\" },
+"
+            "  \"mask_recommendation\": { \"mask_type\": \"string\", \"reasoning\": \"string\" },
+"
+            "  \"indoor_safety\": { \"windows\": \"string\", \"air_purifier\": \"string\", \"hydration\": \"string\", \"other_recommendations\": [\"string\"], \"reasoning\": \"string\" },
+"
+            "  \"personalized_health_risk\": { \"risk_level\": \"string\", \"explanation\": \"string\", \"sensitive_population_warnings\": [\"string\"] },
+"
+            "  \"symptoms_to_watch\": [\"string\"],
+"
+            "  \"emergency_warning\": { \"active\": boolean, \"message\": \"string\", \"when_to_seek_care\": \"string\" },
+"
+            "  \"long_term_advice\": [\"string\"],
+"
+            "  \"extra\": { \"source\": \"string\", \"generated_by\": \"Gemini AI\" }
+"
+            "}"
         )
 
-        fallback = _fallback_health_advice(language)
-        return await self._generate(prompt, fallback)
+        fallback_advice = self._build_structured_health_advice(
+            environmental_context, health_profile, language
+        )
+        fallback_text = json.dumps(fallback_advice, ensure_ascii=False)
+        raw_response = await self._generate(prompt, fallback_text)
+        advice = self._parse_structured_health_advice(raw_response) or fallback_advice
+        summary = advice.get("overall_summary") or fallback_advice["overall_summary"]
+        return summary, advice
+
+    @staticmethod
+    def _aqi_category(aqi: float) -> str:
+        if aqi <= 50:
+            return "Good"
+        if aqi <= 100:
+            return "Moderate"
+        if aqi <= 200:
+            return "Unhealthy"
+        if aqi <= 300:
+            return "Very Unhealthy"
+        return "Hazardous"
+
+    @staticmethod
+    def _parse_structured_health_advice(raw: str) -> dict[str, Any] | None:
+        if not raw or not raw.strip():
+            return None
+        text = raw.strip()
+        if "{" not in text or "}" not in text:
+            return None
+        try:
+            start = text.index("{")
+            end = text.rfind("}") + 1
+            payload = text[start:end]
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            try:
+                payload = text[text.index("{"): text.rfind("}") + 1]
+                return ast.literal_eval(payload)
+            except Exception:
+                return None
+
+    @staticmethod
+    def _build_structured_health_advice(
+        environmental_context: EnvironmentalContext,
+        health_profile: UserHealthProfile,
+        language: str = "en",
+    ) -> dict[str, Any]:
+        aqi = environmental_context.aqi_level
+        aqi_category = environmental_context.aqi_category or GeminiService._aqi_category(aqi)
+
+        pollutants = [
+            ("PM2.5", environmental_context.pm25, 35.0),
+            ("PM10", environmental_context.pm10, 50.0),
+            ("NO₂", environmental_context.no2, 40.0),
+            ("SO₂", environmental_context.so2, 20.0),
+            ("CO", environmental_context.co, 5.0),
+            ("O₃", environmental_context.o3, 100.0),
+        ]
+        elevated = []
+        primary_pollutant = "AQI"
+        primary_score = 0.0
+        for name, value, threshold in pollutants:
+            if value is None:
+                continue
+            ratio = value / threshold if threshold else 0.0
+            if ratio > primary_score:
+                primary_score = ratio
+                primary_pollutant = name
+            if value >= threshold * 0.8:
+                elevated.append(
+                    {
+                        "pollutant": name,
+                        "value": round(value, 1),
+                        "unit": "µg/m³",
+                        "health_impact": (
+                            "Can irritate the respiratory tract and worsen asthma symptoms."
+                            if name in ("PM2.5", "PM10")
+                            else "May increase airway inflammation and cardiovascular strain."
+                        ),
+                    }
+                )
+
+        if not elevated and pollutants:
+            for name, value, threshold in pollutants:
+                if value is not None:
+                    elevated.append(
+                        {
+                            "pollutant": name,
+                            "value": round(value, 1),
+                            "unit": "µg/m³",
+                            "health_impact": "Measured but not currently above the main advisory threshold.",
+                        }
+                    )
+                    if len(elevated) >= 3:
+                        break
+
+        if aqi > 200:
+            activity = "Avoid all outdoor exercise and limit time outside to essential travel only."
+            mask = "N95 or KN95 mask outdoors given the current high particulate levels."
+            window = "Keep windows closed while pollution persists."
+        elif aqi > 100:
+            activity = "Reduce strenuous outdoor activities and choose short walks instead of jogging."
+            mask = "A surgical mask may help, but N95/KN95 is better if you are sensitive."
+            window = "Keep windows closed when pollution peaks and ventilate briefly when air quality improves."
+        else:
+            activity = "Outdoor activities are generally safe, but remain aware of any symptoms."
+            mask = "No special mask is required for most people; use one if you are sensitive."
+            window = "Open windows when the air feels fresh; close them if pollution rises."
+
+        sensitive_warnings = []
+        if health_profile.age_category == "child":
+            sensitive_warnings.append(
+                "Children are more sensitive to fine particulates and should avoid prolonged outdoor play."
+            )
+        elif health_profile.age_category == "elderly":
+            sensitive_warnings.append(
+                "Elderly people are at higher risk of cardiovascular stress from polluted air."
+            )
+        if health_profile.conditions.get("respiratory"):
+            sensitive_warnings.append(
+                "Respiratory conditions increase sensitivity to PM2.5 and NO₂ exposure."
+            )
+        if health_profile.conditions.get("heart_disease"):
+            sensitive_warnings.append(
+                "Heart conditions raise the danger of pollution-related chest discomfort and fatigue."
+            )
+        if health_profile.conditions.get("pregnancy"):
+            sensitive_warnings.append(
+                "Pregnancy can make air pollution more harmful for both the mother and the developing baby."
+            )
+        if health_profile.conditions.get("outdoor_occupation"):
+            sensitive_warnings.append(
+                "Outdoor work increases exposure duration and makes protective actions more important."
+            )
+
+        symptoms = [
+            "Coughing",
+            "Wheezing",
+            "Shortness of breath",
+            "Chest tightness",
+            "Eye irritation",
+        ]
+
+        emergency_active = aqi > 200 or primary_pollutant == "PM2.5" and aqi > 150
+        emergency_msg = (
+            "AQI is in a very unhealthy range. Move indoors and seek medical attention if breathing becomes difficult."
+            if emergency_active
+            else "Monitor symptoms and seek care if they worsen or do not improve after moving indoors."
+        )
+
+        return {
+            "overall_summary": (
+                f"Current air quality in {ward_text}, {city_text} is {aqi_category} (AQI {aqi:.0f}). "
+                f"{primary_pollutant} is the main contributor today, and the recommendation is tailored to your profile."
+            ),
+            "pollution_analysis": {
+                "primary_pollutant": primary_pollutant,
+                "why_aqi_dangerous": (
+                    f"AQI {aqi:.0f} is unhealthy because {primary_pollutant} levels are elevated and {condition_text.lower()}"
+                    if condition_text != "No pre-existing health conditions reported."
+                    else f"AQI {aqi:.0f} is elevated and the pollutant mix increases inflammation and respiratory strain."
+                ),
+                "elevated_pollutants": elevated,
+            },
+            "activity_recommendation": {
+                "recommendation": activity,
+                "reasoning": (
+                    f"Because the air quality is {aqi_category} and {primary_pollutant} has the strongest contribution, outdoor exertion will increase breathing exposure."
+                ),
+            },
+            "mask_recommendation": {
+                "mask_type": (
+                    "N95/KN95" if aqi > 150 or health_profile.conditions.get("respiratory") else "Surgical mask"
+                ),
+                "reasoning": (
+                    f"Higher pollutant concentration and your profile mean respiratory protection is important when outdoors."
+                ),
+            },
+            "indoor_safety": {
+                "windows": window,
+                "air_purifier": (
+                    "Use an air purifier if available, especially when PM2.5 is above safe levels."
+                    if environmental_context.pm25 and environmental_context.pm25 > 35
+                    else "Use an air purifier if you have one, and keep indoor air as clean as possible."
+                ),
+                "hydration": (
+                    "Stay well hydrated to help your airways cope with irritation."
+                    if aqi > 100
+                    else "Maintain regular hydration to support respiratory health."
+                ),
+                "other_recommendations": [
+                    "Avoid burning incense or candles indoors.",
+                    "Keep indoor air circulation gentle and avoid heavy cooking smoke."
+                ],
+                "reasoning": (
+                    "Indoor air quality is easier to manage than outdoor air, so focus on limiting indoor sources and keeping the home environment safer."
+                ),
+            },
+            "personalized_health_risk": {
+                "risk_level": (
+                    "High" if aqi > 150 or health_profile.conditions.get("respiratory") else "Moderate"
+                ),
+                "explanation": (
+                    f"Your age category is {health_profile.age_category} and the current AQI is {aqi_category}, which increases the likelihood of respiratory symptoms."
+                ),
+                "sensitive_population_warnings": sensitive_warnings,
+            },
+            "symptoms_to_watch": symptoms,
+            "emergency_warning": {
+                "active": emergency_active,
+                "message": emergency_msg,
+                "when_to_seek_care": (
+                    "If shortness of breath persists after moving indoors, seek medical attention immediately."
+                    if emergency_active
+                    else "If symptoms persist or worsen, consult a healthcare provider."
+                ),
+            },
+            "long_term_advice": [
+                "Reduce repeated outdoor exposure on days with poor air quality.",
+                "Choose indoor exercise when pollution levels are high.",
+                "Track AQI before planning outdoor activities.",
+            ],
+            "extra": {
+                "source": environmental_context.source or "unknown",
+                "generated_by": "Gemini AI",
+                "timestamp": timestamp_text,
+                "pollutant_summary": pollutant_summary,
+            },
+        }
 
     async def generate_government_recommendations(
         self,

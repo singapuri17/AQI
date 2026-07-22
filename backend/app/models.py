@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for the Urban Air Quality system."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -14,6 +14,8 @@ from sqlalchemy import (
     Text,
     func,
 )
+import json
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -237,9 +239,19 @@ class HealthAdvisory(Base):
         String(50), nullable=False
     )  # low | moderate | high | very_high | hazardous
     advice_text: Mapped[str] = mapped_column(Text, nullable=False)
+    advice_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     language: Mapped[str] = mapped_column(
         String(20), nullable=False, default="en"
     )  # en | hi | gu
+
+    @property
+    def advice(self) -> dict[str, Any]:
+        if self.advice_json:
+            try:
+                return json.loads(self.advice_json)
+            except Exception:
+                return {"overall_summary": self.advice_text}
+        return {"overall_summary": self.advice_text}
     ward_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
