@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_government_user, get_current_user
+from app.auth import get_current_government_user, get_current_staff_user, get_current_user
 from app.database import get_db
 from app.models import AQIData
 from app.schemas import AQIDataCreate, AQIDataResponse
@@ -136,7 +136,7 @@ async def get_source_info(
 async def refresh_aqi(
     city: Optional[str] = Query(default=None, description="Refresh only this city"),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_user),
+    _=Depends(get_current_staff_user),
 ):
     """Fetch fresh AQI from OpenWeatherMap / WAQI for all (or one city's) wards."""
     from app.config import get_settings
