@@ -17,7 +17,6 @@ import {
   CpuChipIcon,
   DocumentTextIcon,
   BellIcon,
-  LightBulbIcon,
   ArrowRightOnRectangleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -39,7 +38,6 @@ import OfficerManagement from './admin/OfficerManagement'
 import Analytics        from './admin/Analytics'
 import AdminReports     from './admin/AdminReports'
 import Alerts           from './admin/Alerts'
-import AIInsights       from './admin/AIInsights'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sidebar definition
@@ -75,7 +73,6 @@ const NAV_SECTIONS = [
     items: [
       { id: 'ai-actions',   label: 'AI Recommended Actions', icon: LightBulbIcon },
       { id: 'alerts',       label: 'Alerts',           icon: BellIcon          },
-      { id: 'ai-insights',  label: 'AI Insights',      icon: LightBulbIcon     },
     ],
   },
 ]
@@ -192,7 +189,6 @@ function ViewContent({ view, setView }) {
     case 'analytics':    return <Analytics />
     case 'reports':      return <AdminReports />
     case 'alerts':       return <Alerts />
-    case 'ai-insights':  return <AIInsights />
     default:             return <AdminOverview setView={setView} />
   }
 }

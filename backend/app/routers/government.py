@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_government_user, get_current_government_or_admin_user, get_current_user
+from app.auth import get_current_government_user, get_current_user
 from app.database import get_db
 from app.models import AQIData, EvidenceReport, GovernmentAction
 from app.schemas import (
@@ -99,7 +99,7 @@ async def update_action_status(
     action_id: int,
     payload: GovernmentActionStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_user),
+    _=Depends(get_current_staff_user),
 ):
     """Change the status of an existing action (pending → in_progress → completed / cancelled)."""
     from datetime import datetime, timezone
@@ -125,7 +125,7 @@ async def update_action_status(
 async def get_recommendations(
     city: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_or_admin_user),
+    _=Depends(get_current_government_user),
 ):
     from sqlalchemy import func
     from app.services.gemini_service import GeminiService
@@ -169,7 +169,7 @@ async def get_recommendations(
 async def get_ward_recommendations(
     ward_id: str,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_or_admin_user),
+    _=Depends(get_current_government_user),
 ):
     """Rule-based recommendation engine — generates unique actions per ward
     based on AQI, pollutants, industry data, and construction activity."""
@@ -276,7 +276,7 @@ async def list_reports(
 async def generate_report(
     payload: ReportGenerationRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_government_user),
+    current_user=Depends(get_current_staff_user),
 ):
     """Generate a comprehensive PDF evidence report and store its metadata.
 
@@ -333,7 +333,7 @@ async def generate_report(
 async def download_report(
     report_id: int,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_government_user),
+    _=Depends(get_current_staff_user),
 ):
     """Stream the PDF file for report *report_id*.
 

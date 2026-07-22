@@ -36,6 +36,7 @@ const governmentLinks = [
   { to: '/government/hotspots',    label: 'Hotspots',         icon: ExclamationTriangleIcon },
   { to: '/government/industries',  label: 'Industries',       icon: BuildingStorefrontIcon },
   { to: '/government/priority',    label: 'Priority Ranking', icon: StarIcon },
+  { to: '/government/predictions', label: 'AQI Predictions',  icon: ChartBarIcon },
   { to: '/government/actions',     label: 'Actions',          icon: BoltIcon },
   { to: '/government/reports',     label: 'Reports',          icon: DocumentTextIcon },
 ]

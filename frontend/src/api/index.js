@@ -25,6 +25,8 @@ export const aqiAPI = {
   getWardList: (city) => axios.get(city ? `/aqi/wards?city=${city}` : '/aqi/wards'),
   getCities: () => axios.get('/aqi/cities'),
   getHistoricalAQI: (wardId, days = 7) => axios.get(`/aqi/historical/${wardId}?days=${days}`),
+  getSourceInfo: (city) => axios.get(city ? `/aqi/source-info?city=${city}` : '/aqi/source-info'),
+  triggerRefresh: (city) => axios.post(city ? `/aqi/refresh?city=${city}` : '/aqi/refresh'),
 }
 
 export const predictionsAPI = {

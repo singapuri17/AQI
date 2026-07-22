@@ -19,8 +19,6 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # ── Database ──────────────────────────────────────────────────────────────
-    # Default: SQLite stored in backend/air_quality.db
-    # Production: set DATABASE_URL=postgresql+asyncpg://... in .env
     database_url: str = "sqlite+aiosqlite:///./air_quality.db"
 
     # ── JWT ───────────────────────────────────────────────────────────────────
@@ -28,10 +26,18 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
-    # ── External APIs (optional) ──────────────────────────────────────────────
+    # ── External APIs ─────────────────────────────────────────────────────────
     gemini_api_key: str = ""
     openaq_api_key: str = ""
+    # OpenWeatherMap Air Pollution API key (primary real-time source)
+    # Get free key at: https://home.openweathermap.org/api_keys
     weather_api_key: str = ""
+    # WAQI (World Air Quality Index) token (secondary source)
+    # Get free token at: https://aqicn.org/data-platform/token/
+    waqi_api_key: str = ""
+
+    # ── AQI refresh interval ──────────────────────────────────────────────────
+    aqi_refresh_interval_minutes: int = 30
 
     # ── App meta ──────────────────────────────────────────────────────────────
     app_name: str = "Urban Air Quality Intelligence and Intervention System"
