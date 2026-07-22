@@ -6,28 +6,129 @@ import { HeartIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { useCityStore, filterWardsByCity } from '../../store/cityStore'
+import { getAQICategory, getRiskBgClass, formatAQI } from '../../utils/aqiUtils'
 
 const LANGUAGES = [
-  { value: 'english',  label: 'English'  },
-  { value: 'hindi',    label: 'Hindi'    },
-  { value: 'gujarati', label: 'Gujarati' },
+  { value: 'en', label: 'English' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'gu', label: 'Gujarati' },
 ]
 
 const mockAdvice = {
-  english: {
-    activity:    'Avoid prolonged outdoor activities. Moderate indoor exercise is fine. Elderly and children should stay indoors.',
-    mask:        'Wear an N95/KN95 mask outdoors. Regular surgical masks offer insufficient protection against PM2.5 particles.',
-    precautions: 'Keep windows closed. Use an air purifier if available. Stay hydrated. Watch for coughing or throat irritation.',
+  en: {
+    overall_summary: 'Air quality is elevated in your selected ward today. Priority is reducing outdoor exposure and controlling indoor air sources for your health.',
+    pollution_analysis: {
+      primary_pollutant: 'PM2.5',
+      why_aqi_dangerous: 'Fine particulates are the main contributor and can penetrate deep into the lungs, increasing respiratory strain.',
+      elevated_pollutants: [
+        { pollutant: 'PM2.5', value: 85, unit: 'µg/m³', health_impact: 'Can worsen asthma and cause throat irritation.' },
+        { pollutant: 'PM10', value: 110, unit: 'µg/m³', health_impact: 'May irritate airways and increase coughing.' },
+      ],
+    },
+    activity_recommendation: {
+      recommendation: 'Avoid strenuous outdoor activities and keep outdoor time brief.',
+      reasoning: 'Higher particulate levels increase breathing stress, especially during exertion.',
+    },
+    mask_recommendation: {
+      mask_type: 'N95/KN95',
+      reasoning: 'A respirator provides better protection against fine particles than a regular mask.',
+    },
+    indoor_safety: {
+      windows: 'Keep windows closed while pollution remains high.',
+      air_purifier: 'Use an air purifier if available.',
+      hydration: 'Stay well hydrated to support your airways.',
+      other_recommendations: ['Avoid indoor smoke sources.', 'Ventilate briefly only when air quality improves.'],
+      reasoning: 'Indoor air is easier to control, so reduce indoor sources and keep the home environment safer.',
+    },
+    personalized_health_risk: {
+      risk_level: 'High',
+      explanation: 'Your profile and the current pollutant levels make respiratory irritation more likely.',
+      sensitive_population_warnings: ['Respiratory conditions increase risk from PM2.5.', 'Elderly and children are more vulnerable to fine particulates.'],
+    },
+    symptoms_to_watch: ['Coughing', 'Wheezing', 'Shortness of breath', 'Chest tightness', 'Eye irritation'],
+    emergency_warning: {
+      active: false,
+      message: 'Move indoors if symptoms appear and seek medical help if they worsen.',
+      when_to_seek_care: 'If breathing trouble persists even after moving indoors, consult a doctor.',
+    },
+    long_term_advice: ['Monitor AQI before planning outdoor activities.', 'Exercise indoors when pollution is poor.', 'Limit repeated exposure on high AQI days.'],
+    extra: { source: 'fallback', generated_by: 'Local advisory engine' },
   },
-  hindi: {
-    activity:    'लंबे समय तक बाहरी गतिविधियों से बचें। घर के अंदर हल्का व्यायाम ठीक है। बुजुर्ग और बच्चे घर पर रहें।',
-    mask:        'बाहर जाने पर N95/KN95 मास्क पहनें। सामान्य सर्जिकल मास्क PM2.5 कणों से पर्याप्त सुरक्षा नहीं देते।',
-    precautions: 'खिड़कियां बंद रखें। उपलब्ध हो तो एयर प्यूरीफायर उपयोग करें। पानी पर्याप्त पियें।',
+  hi: {
+    overall_summary: 'आपकी चुनी हुई वार्ड में आज वायु गुणवत्ता ऊँची है। बाहरी संपर्क कम रखें और घर के अंदर हवा को नियंत्रित करें।',
+    pollution_analysis: {
+      primary_pollutant: 'PM2.5',
+      why_aqi_dangerous: 'सूक्ष्म कण फेफड़ों में गहराई तक पहुंच सकते हैं और श्वसन पर दबाव बढ़ा सकते हैं।',
+      elevated_pollutants: [
+        { pollutant: 'PM2.5', value: 85, unit: 'µg/m³', health_impact: 'यह अस्थमा को बढ़ा सकता है और गले को परेशान कर सकता है।' },
+      ],
+    },
+    activity_recommendation: {
+      recommendation: 'बाहर की गतिविधियों को सीमित रखें और तेज व्यायाम से बचें।',
+      reasoning: 'उच्च प्रदूषण स्तर श्वास प्रणाली पर अधिक दबाव डालते हैं।',
+    },
+    mask_recommendation: {
+      mask_type: 'N95/KN95',
+      reasoning: 'सूक्ष्म कणों के खिलाफ बेहतर सुरक्षा के लिए respirator जरूरी है।',
+    },
+    indoor_safety: {
+      windows: 'जब तक प्रदूषण बना रहे, खिड़कियाँ बंद रखें।',
+      air_purifier: 'यदि उपलब्ध हो तो एयर प्यूरीफायर चलाएँ।',
+      hydration: 'अपनी वायुमार्ग को आराम देने के लिए पर्याप्त पानी पिएँ।',
+      other_recommendations: ['घर के अंदर धूम्रपान से बचें।', 'हवा साफ होने पर हल्का वेंटिलेशन करें।'],
+      reasoning: 'घर के अंदर हवा नियंत्रित करना आसान है, इसलिए स्रोतों को कम रखें।',
+    },
+    personalized_health_risk: {
+      risk_level: 'High',
+      explanation: 'आपकी प्रोफ़ाइल और वायु की स्थिति से श्वसन समस्याओं का जोखिम बढ़ता है।',
+      sensitive_population_warnings: ['अन्य श्वसन स्थितियों से जोखिम और अधिक बढ़ता है।'],
+    },
+    symptoms_to_watch: ['खाँसी', 'सीटी की आवाज', 'साँस लेने में कठिनाई', 'छाती में दबाव', 'आँखों में जलन'],
+    emergency_warning: {
+      active: false,
+      message: 'यदि लक्षण बढ़ें तो अंदर जाएँ और चिकित्सकीय सहायता लें।',
+      when_to_seek_care: 'यदि सांस लेने में कठिनाई बनी रहे, तो डॉक्टर से मिलें।',
+    },
+    long_term_advice: ['खराब AQI वाले दिनों में बाहर जाने से पहले AQI देखें।', 'उच्च प्रदूषण पर घर के अंदर व्यायाम करें।', 'बार-बार संपर्क कम करें।'],
+    extra: { source: 'fallback', generated_by: 'Local advisory engine' },
   },
-  gujarati: {
-    activity:    'લાંબા સમય સુધી બહારની પ્રવૃત્તિઓ ટાળો. ઘરની અંદર હળવી કસરત ઠીક છે. વૃદ્ધો અને બાળકો ઘરે રહો.',
-    mask:        'બહાર જતી વખતે N95/KN95 માસ્ક પહેરો. સામાન્ય સર્જિકલ માસ્ક PM2.5 સામે પૂરતું રક્ષણ આપતા નથી.',
-    precautions: 'બારીઓ બંધ રાખો. ઉપલબ્ધ હોય તો એર પ્યુરિફાયર વાપરો. પૂરતું પાણી પીઓ.',
+  gu: {
+    overall_summary: 'તમારા પસંદ કરેલા વિસ્તારમાં આજે હવાની ગુણવત્તા ઊંચી છે. બહારના સંપર્કને ઓછું રાખો અને અંદરના હવા સ્ત્રોતો નિયંત્રિત કરો.',
+    pollution_analysis: {
+      primary_pollutant: 'PM2.5',
+      why_aqi_dangerous: 'નાના કણો ફેફસાં સુધી પહોંચીને શ્વાસ પર વધુ ભાર મૂકી શકે છે.',
+      elevated_pollutants: [
+        { pollutant: 'PM2.5', value: 85, unit: 'µg/m³', health_impact: 'આ શ્વાસને વધુ મુશ્કેલ બનાવી શકે છે અને ગળામાં જલન કરી શકે છે.' },
+      ],
+    },
+    activity_recommendation: {
+      recommendation: 'બહારની પ્રવૃતિઓ સીમિત રાખો અને ભારે કસરતથી બચો.',
+      reasoning: 'ઉચ્ચ પ્રદૂષણ સ્તર શ્વસન તંત્ર પર તણાવ વધારી શકે છે.',
+    },
+    mask_recommendation: {
+      mask_type: 'N95/KN95',
+      reasoning: 'સૂક્ષ્મ કણો માટે ઉત્તમ રક્ષણ માટે respirator મહત્વપૂર્ણ છે.',
+    },
+    indoor_safety: {
+      windows: 'પ્રદૂષણ ચાલુ રહે ત્યાં સુધી બારીઓ બંધ રાખો.',
+      air_purifier: 'હવી હોય તો એર શુદ્ધિકરણ યંત્રનો ઉપયોગ કરો.',
+      hydration: 'તમારા વાયુ માર્ગોને આરામ આપવા માટે પૂરતું પાણી પીઓ.',
+      other_recommendations: ['અંદરના ધૂમ્રપાનથી દૂર રહો.', 'હવા સાફ થતી વખતે હળવી રીતે હવામાન કરો.'],
+      reasoning: 'અંદરની હવાને નિયંત્રિત કરવી સરળ છે, તેથી સ્ત્રોતોને ઘટાવો.',
+    },
+    personalized_health_risk: {
+      risk_level: 'High',
+      explanation: 'તમારી પ્રોફાઇલ અને પ્રદૂષણની સ્થિતિ શ્વસન સમસ્યાઓનું જોખમ વધારશે.',
+      sensitive_population_warnings: ['શ્વાસની હાલત સાથે જોખમ વધે છે.'],
+    },
+    symptoms_to_watch: ['ખાંસી', 'શ્વાસ લેવામાં તકલીફ', 'સ્તન દબાણ', 'આંખોમાં જલન', 'ઉધરસ'],
+    emergency_warning: {
+      active: false,
+      message: 'જો લક્ષણો વધે તો અંદર જાઓ અને તબીબની સલાહ લો.',
+      when_to_seek_care: 'જો શ્વાસ લેવામાં તકલીફ સતત રહે, તો ડોક્ટર સાથે સંપર્ક કરો.',
+    },
+    long_term_advice: ['બદમાશ AQI દિવસોમાં બહારનું સંપર્ક ઓછું કરો.', 'ઉચ્ચ પ્રદૂષણ પર અંદર કસરત કરો.', 'બહાર જતાં પહેલાં AQI તપાસો.'],
+    extra: { source: 'fallback', generated_by: 'Local advisory engine' },
   },
 }
 
@@ -44,7 +145,9 @@ export default function HealthRiskPage() {
   const [result, setResult]   = useState(null)
   const [advice, setAdvice]   = useState(null)
   const [loading, setLoading] = useState(false)
-  const [language, setLang]   = useState('english')
+  const [language, setLang]   = useState('en')
+
+  const structuredAdvice = advice?.advice ?? advice
 
   // ── Load wards for the selected city ──────────────────────────────
   useEffect(() => {
@@ -96,6 +199,20 @@ export default function HealthRiskPage() {
           aqi_level:      wardAQI,
           age_category:   form.age_category,
           has_respiratory: form.respiratory,
+          ward_id:        form.ward_id,
+          ward_name:      chosenWard?.ward_name,
+          city:           selectedCity,
+          aqi_category:   chosenWard?.aqi_category || getAQICategory(wardAQI).label,
+          pm25:           chosenWard?.pm25,
+          pm10:           chosenWard?.pm10,
+          no2:            chosenWard?.no2,
+          so2:            chosenWard?.so2,
+          co:             chosenWard?.co,
+          o3:             chosenWard?.o3,
+          timestamp:      chosenWard?.timestamp,
+          latitude:       chosenWard?.latitude,
+          longitude:      chosenWard?.longitude,
+          source:         chosenWard?.source,
           language,
         })
         setAdvice(adviceRes.data)
@@ -259,14 +376,19 @@ export default function HealthRiskPage() {
                 )}
               </div>
 
-              {advice && (
-                <div className="glass-card p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-                      Health Advisory
-                    </h2>
+              {structuredAdvice ? (
+                <div className="glass-card p-5 space-y-6">
+                  <div className="flex items-center justify-between mb-3 gap-4">
+                    <div>
+                      <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                        AI Health Advisory
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Tailored to your profile and current ward air quality.
+                      </p>
+                    </div>
                     <select
-                      className="input-field !w-32 !py-1 text-sm"
+                      className="input-field !w-36 !py-1 text-sm"
                       value={language}
                       onChange={e => setLang(e.target.value)}
                     >
@@ -275,18 +397,97 @@ export default function HealthRiskPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-3">
-                    {[
-                      { key: 'activity',    label: '🏃 Activity',    content: advice.activity    },
-                      { key: 'mask',        label: '😷 Mask Usage',  content: advice.mask        },
-                      { key: 'precautions', label: '⚠️ Precautions', content: advice.precautions },
-                    ].filter(({ content }) => content).map(({ key, label, content }) => (
-                      <div key={key} className="p-3 bg-gray-800/50 rounded-xl border border-gray-700/30">
-                        <p className="text-xs font-semibold text-gray-300 mb-1.5">{label}</p>
-                        <p className="text-sm text-gray-300 leading-relaxed">{content}</p>
-                      </div>
-                    ))}
+
+                  <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                    <p className="text-sm text-slate-300">Overall Health Summary</p>
+                    <p className="mt-2 text-white text-lg font-semibold leading-7">
+                      {structuredAdvice.overall_summary}
+                    </p>
                   </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                      <p className="text-sm text-slate-300 mb-3">Pollution Analysis</p>
+                      <p className="text-white font-semibold">Primary contributor: {structuredAdvice.pollution_analysis.primary_pollutant}</p>
+                      <p className="text-sm text-gray-300 mt-2">{structuredAdvice.pollution_analysis.why_aqi_dangerous}</p>
+                      <div className="mt-4 space-y-3">
+                        {(structuredAdvice.pollution_analysis.elevated_pollutants || []).map(item => (
+                          <div key={item.pollutant} className="rounded-2xl bg-gray-800/90 p-3 border border-gray-700">
+                            <p className="text-xs text-gray-400 uppercase tracking-[0.15em]">{item.pollutant}</p>
+                            <p className="text-sm text-white font-semibold">{item.value} {item.unit}</p>
+                            <p className="text-xs text-gray-400 mt-1">{item.health_impact}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                      <p className="text-sm text-slate-300 mb-3">Personalized Health Risk</p>
+                      <p className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getRiskBgClass(structuredAdvice.personalized_health_risk.risk_level)}`}>
+                        {structuredAdvice.personalized_health_risk.risk_level}
+                      </p>
+                      <p className="text-sm text-gray-300 mt-3">{structuredAdvice.personalized_health_risk.explanation}</p>
+                      <ul className="mt-4 list-disc pl-5 text-sm text-gray-400 space-y-1">
+                        {(structuredAdvice.personalized_health_risk.sensitive_population_warnings || []).map((warning, idx) => (
+                          <li key={idx}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                      <p className="text-sm text-slate-300 mb-3">Activity Recommendation</p>
+                      <p className="text-white font-semibold">{structuredAdvice.activity_recommendation.recommendation}</p>
+                      <p className="text-sm text-gray-400 mt-2">{structuredAdvice.activity_recommendation.reasoning}</p>
+                    </div>
+                    <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                      <p className="text-sm text-slate-300 mb-3">Mask Recommendation</p>
+                      <p className="text-white font-semibold">{structuredAdvice.mask_recommendation.mask_type}</p>
+                      <p className="text-sm text-gray-400 mt-2">{structuredAdvice.mask_recommendation.reasoning}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                    <p className="text-sm text-slate-300 mb-3">Indoor Safety</p>
+                    <p className="text-white font-semibold">Windows: {structuredAdvice.indoor_safety.windows}</p>
+                    <p className="text-white font-semibold mt-2">Air purifier: {structuredAdvice.indoor_safety.air_purifier}</p>
+                    <p className="text-white font-semibold mt-2">Hydration: {structuredAdvice.indoor_safety.hydration}</p>
+                    <div className="mt-3 space-y-2 text-sm text-gray-400">
+                      {(structuredAdvice.indoor_safety.other_recommendations || []).map((item, idx) => (
+                        <p key={idx}>• {item}</p>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3">{structuredAdvice.indoor_safety.reasoning}</p>
+                  </div>
+
+                  <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                    <p className="text-sm text-slate-300 mb-3">Symptoms to Watch</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(structuredAdvice.symptoms_to_watch || []).map((symptom, idx) => (
+                        <span key={idx} className="rounded-full bg-gray-800 px-3 py-2 text-xs text-gray-300">{symptom}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-red-500/50 bg-red-900/10 p-5">
+                    <p className="text-sm text-red-300 uppercase tracking-[0.15em] mb-2">Emergency Warning</p>
+                    <p className="text-white font-semibold">{structuredAdvice.emergency_warning?.message}</p>
+                    <p className="text-sm text-gray-300 mt-2">{structuredAdvice.emergency_warning?.when_to_seek_care}</p>
+                  </div>
+
+                  <div className="rounded-3xl border border-gray-700/60 bg-gray-900/60 p-5">
+                    <p className="text-sm text-slate-300 mb-3">Long-Term Advice</p>
+                    <ul className="list-disc pl-5 text-sm text-gray-400 space-y-2">
+                      {(structuredAdvice.long_term_advice || []).map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div className="glass-card p-5">
+                  <div className="text-gray-300">No advisory data available.</div>
                 </div>
               )}
             </>

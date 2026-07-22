@@ -221,12 +221,9 @@ function WardAnalysisCard({ ward, onAccept, searchTerm, onDataLoaded }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────
-export default function ActionsPage() {
-  const location  = useLocation()
-  const navigate  = useNavigate()
-  const { user }         = useAuthStore()
-  const { selectedCity } = useCityStore()
-  const city = user?.city || selectedCity || null
+export function ActionsPageContent({ city, pageTitle = 'Government Actions', pageSubtitle }) {
+  const location = useLocation()
+  const navigate = useNavigate()
 
   // ── State ────────────────────────────────────────────────────────────
   const [actions, setActions]           = useState([])
@@ -280,6 +277,17 @@ export default function ActionsPage() {
       }
     }).catch(() => {})
   }, [city, location.search]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!city) return
+    setSearchTerm('')
+    setActiveFilter('All')
+    setSortBy('Highest AQI')
+    setExpandedWard(null)
+    setHighlightedWard(null)
+    setShowForm(false)
+    setWardData({})
+  }, [city])
 
   // ── Eagerly prefetch ALL ward analysis data on load ───────────────────
   // This makes the PollutionAnalysisPanel work immediately without
@@ -412,9 +420,13 @@ export default function ActionsPage() {
 
   const handleAccordionClick = (ward_id) => {
     setExpandedWard(prev => prev === ward_id ? null : ward_id)
-    // Update URL without re-fetching
+    // Update URL query only, keeping the current route path.
     const ward = cityWards.find(w => w.ward_id === ward_id)
-    if (ward) navigate(`/government/actions?ward=${encodeURIComponent(ward.ward_name)}`, { replace: true })
+    if (ward) {
+      const params = new URLSearchParams(location.search)
+      params.set('ward', ward.ward_name)
+      navigate(`${location.pathname}?${params.toString()}`, { replace: true })
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -424,10 +436,10 @@ export default function ActionsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <BoltIcon className="w-6 h-6 text-blue-400" /> Government Actions
+            <BoltIcon className="w-6 h-6 text-blue-400" /> {pageTitle}
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">
-            Rule-based ward recommendations · {city && <span className="text-purple-300 font-medium">{city}</span>}
+            {pageSubtitle || 'Rule-based ward recommendations for the current city.'}
           </p>
         </div>
         <button onClick={() => { setShowForm(s => !s); setActiveTab('actions') }}

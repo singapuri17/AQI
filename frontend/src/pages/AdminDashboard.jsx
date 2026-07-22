@@ -33,6 +33,7 @@ import CityMonitor      from './admin/CityMonitor'
 import CityComparison   from './admin/CityComparison'
 import WardComparison   from './admin/WardComparison'
 import StateMap         from './admin/StateMap'
+import AIRecommendedActions from './admin/AIRecommendedActions'
 import ActionMonitor    from './admin/ActionMonitor'
 import OfficerManagement from './admin/OfficerManagement'
 import Analytics        from './admin/Analytics'
@@ -64,7 +65,7 @@ const NAV_SECTIONS = [
   {
     label: 'Operations',
     items: [
-      { id: 'actions',      label: 'Actions',          icon: BoltIcon          },
+      { id: 'actions',      label: 'Action Taking',    icon: BoltIcon          },
       { id: 'officers',     label: 'Officers',         icon: UserGroupIcon     },
       { id: 'reports',      label: 'Reports',          icon: DocumentTextIcon  },
     ],
@@ -72,6 +73,7 @@ const NAV_SECTIONS = [
   {
     label: 'Intelligence',
     items: [
+      { id: 'ai-actions',   label: 'AI Recommended Actions', icon: LightBulbIcon },
       { id: 'alerts',       label: 'Alerts',           icon: BellIcon          },
       { id: 'ai-insights',  label: 'AI Insights',      icon: LightBulbIcon     },
     ],
@@ -184,6 +186,7 @@ function ViewContent({ view, setView }) {
     case 'comparison':   return <CityComparison />
     case 'ward-compare': return <WardComparison />
     case 'state-map':    return <StateMap />
+    case 'ai-actions':   return <AIRecommendedActions />
     case 'actions':      return <ActionMonitor />
     case 'officers':     return <OfficerManagement />
     case 'analytics':    return <Analytics />

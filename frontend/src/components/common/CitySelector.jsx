@@ -11,7 +11,7 @@ import { useCityStore, CITIES_WITH_DATA, detectCityFromCoords } from '../../stor
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
-export default function CitySelector({ className = '' }) {
+export default function CitySelector({ className = '', showGeolocation = true }) {
   const { selectedCity, setCity, setUserLocation, clearUserLocation, availableCities } = useCityStore()
   // Use live list from backend; fall back to static list while loading
   const cityList = availableCities.length > 0 ? availableCities : CITIES_WITH_DATA
@@ -158,30 +158,31 @@ export default function CitySelector({ className = '' }) {
         />
       </button>
 
-      {/* Use My Location button */}
-      <button
-        onClick={handleGeolocation}
-        disabled={locating}
-        title="Detect my city from GPS"
-        className={clsx(
-          'flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all',
-          locating
-            ? 'bg-blue-600/20 border-blue-500/40 text-blue-400 cursor-wait'
-            : 'bg-gray-800/70 border-gray-700/60 text-gray-300 hover:border-blue-500/50 hover:text-white'
-        )}
-      >
-        {locating ? (
-          <>
-            <span className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
-            <span className="hidden sm:inline">Locating…</span>
-          </>
-        ) : (
-          <>
-            <MapPinIcon className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Use My Location</span>
-          </>
-        )}
-      </button>
+      {showGeolocation && (
+        <button
+          onClick={handleGeolocation}
+          disabled={locating}
+          title="Detect my city from GPS"
+          className={clsx(
+            'flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all',
+            locating
+              ? 'bg-blue-600/20 border-blue-500/40 text-blue-400 cursor-wait'
+              : 'bg-gray-800/70 border-gray-700/60 text-gray-300 hover:border-blue-500/50 hover:text-white'
+          )}
+        >
+          {locating ? (
+            <>
+              <span className="w-4 h-4 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+              <span className="hidden sm:inline">Locating…</span>
+            </>
+          ) : (
+            <>
+              <MapPinIcon className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Use My Location</span>
+            </>
+          )}
+        </button>
+      )}
 
       {/* Dropdown rendered in a portal so it escapes any overflow:hidden parent */}
       {dropdown}

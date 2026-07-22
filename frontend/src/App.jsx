@@ -17,7 +17,7 @@ import HospitalsPage   from './pages/citizen/HospitalsPage'
 import HotspotsPage   from './pages/government/HotspotsPage'
 import IndustriesPage from './pages/government/IndustriesPage'
 import PriorityPage   from './pages/government/PriorityPage'
-import ActionsPage    from './pages/government/ActionsPage'
+import ActionsPage    from './pages/government/ActionsPageWrapper'
 import ReportsPage    from './pages/government/ReportsPage'
 
 // ── Route guards ─────────────────────────────────────────────────────────
